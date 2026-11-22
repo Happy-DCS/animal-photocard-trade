@@ -1,7 +1,7 @@
 "use client";
 
-import { ApiError } from "@/lib/api-client";
-import { getCurrentUser, refreshAccessToken, signout } from "@/lib/auth/api";
+import { onSessionExpired } from "@/lib/api-client";
+import { getCurrentUser, signout } from "@/lib/auth/api";
 import { getRealtimeClient } from "@/lib/realtime/client";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -29,26 +29,21 @@ export function AuthProvider({ children }) {
 
   //유저정보 조회 함수 (useCallback : 렌더링마다 새 함수생성되지 않도록 함)
   //-> 사용자 조회 결과만 반환하고 여기서는 React 상태를 직접 변경하지 않는다.
+  // access 토큰 만료 시 재발급·재시도는 apiFetch가 처리하므로 여기서는 결과만 받는다.
+  // 401이 남았다면 재발급까지 실패한 것(로그인 만료) — 서버가 이미 인증 쿠키를 지웠으므로 비로그인으로 본다.
+  // TODO: 네트워크 오류 등 401이 아닌 실패도 지금은 비로그인으로 처리한다 (별도 작업)
   const resolveCurrentUser = useCallback(async () => {
     try {
       const { user } = await getCurrentUser();
       return user;
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.status !== 401) {
-        return null;
-      }
-      //401
-      try {
-        await refreshAccessToken();
-        const { user } = await getCurrentUser();
-        return user;
-      } catch {
-        //refeshToken만료-재발급요청실패
-        await signout().catch(() => {});
-        return null;
-      }
+    } catch {
+      return null;
     }
   }, []);
+
+  // 어떤 API 호출에서든 재발급이 실패하면(로그인 만료) 로그인 상태를 비운다.
+  // 보호 페이지는 currentUser가 null이 되면 /login?next=... 로 이동한다
+  useEffect(() => onSessionExpired(() => setCurrentUser(null)), []);
 
   //첫 렌더링 (resolveCurrentUser 변경될 때만 effect재실행)
   useEffect(() => {

@@ -16,6 +16,7 @@ export function signin({ email, password }) {
 }
 
 // GET /users/me — 로그인한 유저 정보. 성공하면 { user }, 로그인 안 했으면 401
+// (access 토큰이 만료됐으면 apiFetch가 재발급 후 한 번 더 시도한다)
 export function getCurrentUser() {
   return apiFetch("/users/me");
 }
@@ -25,7 +26,4 @@ export async function signout() {
   return apiFetch("/auth/signout", { method: "POST", headers: await csrfHeaders() });
 }
 
-// POST /auth/refresh-token — 204. 새 access·refresh 토큰이 쿠키로 교체된다
-export async function refreshAccessToken() {
-  return apiFetch("/auth/refresh-token", { method: "POST", headers: await csrfHeaders() });
-}
+// 토큰 재발급(POST /auth/refresh-token)은 api-client.js의 refreshSession()이 401 처리 중에 자동으로 한다
