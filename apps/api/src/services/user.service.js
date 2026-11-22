@@ -1,6 +1,5 @@
 import { ApiError } from "../lib/api-error.js";
 import { prisma } from "../lib/prisma.js";
-import { getUserChannelTopic } from "../lib/realtime.js";
 import { countUnread } from "../repositories/notification.repository.js";
 import { grantRandomPointIfAvailable } from "../repositories/user.repository.js";
 
@@ -48,8 +47,6 @@ export async function getCurrentUser(user) {
     lastDrawAt: user.lastDrawAt,
     unreadCount,
     createdAt: user.createdAt,
-    // 다른 사용자로 인한 포인트·알림 변경을 실시간으로 받을 Realtime 채널명
-    realtimeChannel: getUserChannelTopic(user.id),
   };
 }
 

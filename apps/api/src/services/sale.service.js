@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import { ApiError } from "../lib/api-error.js";
 import { prisma } from "../lib/prisma.js";
-import { broadcastUserChanged } from "../lib/realtime.js";
+import { notifyUserChanged, notifyUsersChanged } from "./user-event.service.js";
 import * as cardRepository from "../repositories/card.repository.js";
 import * as exchangeRepository from "../repositories/exchange.repository.js";
 import * as notificationRepository from "../repositories/notification.repository.js";
@@ -260,7 +260,7 @@ export async function purchaseCard({ saleId, buyer }) {
     };
   });
 
-  await Promise.all(notifyUserIds.map(broadcastUserChanged));
+  await notifyUsersChanged(notifyUserIds);
   return result;
 }
 
@@ -336,7 +336,7 @@ export async function createExchange({ saleId, offerCardId, message, offerer }) 
     };
   });
 
-  await broadcastUserChanged(sellerId);
+  await notifyUserChanged(sellerId);
   return result;
 }
 
@@ -519,6 +519,6 @@ export async function cancelSale(id, seller) {
     };
   });
 
-  await Promise.all(offererIds.map(broadcastUserChanged));
+  await notifyUsersChanged(offererIds);
   return result;
 }

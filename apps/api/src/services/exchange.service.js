@@ -1,6 +1,6 @@
 import { ApiError } from "../lib/api-error.js";
 import { prisma } from "../lib/prisma.js";
-import { broadcastUserChanged } from "../lib/realtime.js";
+import { notifyUserChanged, notifyUsersChanged } from "./user-event.service.js";
 import * as exchangeRepository from "../repositories/exchange.repository.js";
 import * as notificationRepository from "../repositories/notification.repository.js";
 import * as cardRepository from "../repositories/card.repository.js";
@@ -45,13 +45,15 @@ export async function cancelExchange({ exchangeId, offerer }) {
     };
   });
 
-  await broadcastUserChanged(sellerId);
+  await notifyUserChanged(sellerId);
   return result;
 }
 
 //판매자 입장에서 제안자의 교환 수락
 export async function acceptExchange({ exchangeId, seller }) {
-  return prisma.$transaction(async (tx) => {
+  let notifyUserIds = [];
+
+  const result = await prisma.$transaction(async (tx) => {
     //교환건의 존재 여부, 수락 권한 체크
     const exchange = await exchangeRepository.findExchangeForAccept(tx, exchangeId);
 
@@ -151,17 +153,30 @@ export async function acceptExchange({ exchangeId, seller }) {
         targetId: exchange.saleId,
       })),
     ]);
+
+    // 수락된 제시자와 함께 거절된 제시자들에게도 알림이 생겼으므로 실시간으로 알린다
+    notifyUserIds = [
+      offerCard.ownerId,
+      ...rejectedExchanges.map((rejected) => rejected.offerCard.ownerId),
+    ];
+
     return {
       id: exchangeId,
       status: "ACCEPTED",
       respondedAt,
     };
   });
+
+  // 트랜잭션이 커밋된 뒤에 보내야 최신 알림 수가 읽힌다
+  await notifyUsersChanged(notifyUserIds);
+  return result;
 }
 
 //교환 거절
 export async function rejectExchange({ exchangeId, seller }) {
-  return prisma.$transaction(async (tx) => {
+  let offererId;
+
+  const result = await prisma.$transaction(async (tx) => {
     const exchange = await exchangeRepository.findExchangeForReject(tx, exchangeId);
 
     if (!exchange) throw new ApiError(404, "EXCHANGE_NOT_FOUND", "교환 제시를 찾을 수 없습니다.");
@@ -187,10 +202,16 @@ export async function rejectExchange({ exchangeId, seller }) {
         targetId: exchange.saleId,
       },
     ]);
+
+    offererId = exchange.offerCard.ownerId;
+
     return {
       id: exchangeId,
       status: "REJECTED",
       respondedAt,
     };
   });
+
+  await notifyUserChanged(offererId);
+  return result;
 }
