@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { PHOTO_CARD_GRID_CLASS } from "@/components/card/cardGrid";
 import ScaledPhotoCard from "@/components/card/ScaledPhotoCard";
 import { cardToPhotoCardProps } from "@/components/card/toPhotoCardProps";
 import { fetchMyCards } from "@/lib/gallery/api";
@@ -112,7 +113,7 @@ export default function MyGalleryCards({ userName }) {
 
         {status === "success" && data.items.length > 0 && (
           <>
-            <div className="grid w-full grid-cols-2 justify-items-center gap-3 tablet:gap-5 pc:grid-cols-3">
+            <div className={PHOTO_CARD_GRID_CLASS}>
               {data.items.map((card) => (
                 <ScaledPhotoCard key={card.id} {...cardToPhotoCardProps(card)} />
               ))}

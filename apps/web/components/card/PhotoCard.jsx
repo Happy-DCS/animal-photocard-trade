@@ -3,7 +3,16 @@ import Image from "next/image";
 import AutoFitText from "@/components/gallery/AutoFitText";
 import DotHalftoneImage from "@/components/gallery/DotHalftoneImage";
 
+import MarqueeText from "./MarqueeText";
 import { SCORE_CONFIG, getPrimaryAxisColor } from "./scoreConfig";
+
+// "[패시브: 심야 텐션 폭발] 시치미 우다다 대장" → { tagHead: "[패시브: 심야 텐션 폭발]", tagRest: "시치미 우다다 대장" }
+// 형식이 다르면 태그 전체를 첫 줄에 둔다
+function splitTag(tag) {
+  if (!tag) return { tagHead: "", tagRest: "" };
+  const match = /^(\[[^\]]*\])\s*(.*)$/.exec(tag);
+  return match ? { tagHead: match[1], tagRest: match[2] } : { tagHead: tag, tagRest: "" };
+}
 
 // filterType(1~4, useImageVariants.js VARIANTS 순서와 동일: 원본·세피아·모노·도트) 별 렌더링 방식.
 // 세피아·모노는 CSS filter로 충분하지만, 도트는 픽셀 밝기에 따라 점 크기가 달라지는 진짜
@@ -39,13 +48,13 @@ export default function PhotoCard({
   const isDot = card.filterType === DOT_FILTER_TYPE;
   const cssFilter = CSS_FILTERS[card.filterType];
   const tagColor = getPrimaryAxisColor(card.category, card.score?.axes);
+  const { tagHead, tagRest } = splitTag(card.tag);
 
   return (
     <article
       onClick={onClick}
-      className={`w-100 tracking-tight rounded-[10px] p-3.25 ${onClick ? "cursor-pointer" : ""} ${
-        variant === "owned" ? "h-146.5" : "h-137.5"
-      }`}
+      // 판매·보유 카드 모두 같은 400×586(ScaledPhotoCard의 aspect와 짝). group: 제목 훑기(MarqueeText)가 카드 hover에 반응한다
+      className={`group h-146.5 w-100 tracking-tight rounded-[10px] p-3.25 ${onClick ? "cursor-pointer" : ""}`}
       style={{
         background:
           "linear-gradient(135deg, #353535 0%, #575656 38%, #686666 60%, #555454 82%, #353535 100%)",
@@ -108,13 +117,18 @@ export default function PhotoCard({
           )}
         </div>
 
-        {/* 이름 — 태그(1등축 색)와 이름이 한눈에 구분되도록 태그만 색을 입힌다 */}
-        <h2 className="font-sans-700 mt-2.5 w-4/5 text-[22px] leading-6.5 text-white">
-          <span className={tagColor}>{card.tag}</span> {card.name}
+        {/* 이름 — 1줄: [태그 머리말], 2줄: 태그 나머지 + 이름. 태그(1등축 색)와 이름이 구분되도록 태그만 색을 입힌다.
+            각 줄은 한 줄로 고정하고, 넘치면 카드에 마우스를 올렸을 때 왼쪽→오른쪽으로 훑어 보여준다 */}
+        <h2 className="font-sans-700 mt-2.5 w-4/5 shrink-0 text-[22px] leading-6.5 text-white">
+          {tagHead && <MarqueeText className={tagColor}>{tagHead}</MarqueeText>}
+          <MarqueeText>
+            {tagRest && <span className={tagColor}>{tagRest} </span>}
+            {card.name}
+          </MarqueeText>
         </h2>
 
         {/* 관상 지수 */}
-        <div className="mt-3 space-y-1.5">
+        <div className="mt-3 shrink-0 space-y-1.5">
           {SCORE_CONFIG[card.category]?.map(({ key, label }) => {
             const scoreValue = card.score?.axes?.find((axis) => axis.field === key)?.value ?? 0;
 
@@ -124,7 +138,7 @@ export default function PhotoCard({
 
         {/* 판매카드 포인트 표기 — 내가 제시한 교환 카드처럼 가격이 없는 항목은 숨긴다 */}
         {variant === "sale" && point !== undefined && (
-          <div className="mt-3 border-t border-[#1D1D1D] pt-2">
+          <div className="mt-3 shrink-0 border-t border-[#1D1D1D] pt-2">
             <div className="flex items-center justify-between">
               <AutoFitText className="font-sans-400 text-[12px] text-white">
                 구매 포인트
@@ -150,9 +164,10 @@ export default function PhotoCard({
           </div>
         )}
 
-        {/* 설명카드 소개 표기 */}
+        {/* 설명카드 소개 표기 — 카드 높이가 고정이라 관상 지수와 로고 사이에 남은 높이만 차지하고,
+            글이 길면 이 영역 안에서만 스크롤한다 */}
         {variant === "owned" && (
-          <div className="pt-5">
+          <div className="card-scroll mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
             <p className="font-sans-400 text-[14px] leading-4.25 break-all text-gray-200">
               {card.description}
             </p>
@@ -160,7 +175,7 @@ export default function PhotoCard({
         )}
 
         {/* 하단 공통 서비스 로고 */}
-        <div className="mt-auto flex justify-center">
+        <div className="mt-auto flex shrink-0 justify-center pt-3">
           <Image src="/logo.png" alt="최애 멍냥" width={96} height={24} className="h-6 w-24" />
         </div>
       </div>

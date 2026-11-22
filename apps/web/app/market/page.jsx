@@ -429,21 +429,24 @@ export default function MarketPage() {
     <>
       <AppHeader />
 
+      {/* 카드 폭을 마이갤러리와 똑같이 맞추기 위해 컨테이너 폭도 같은 기준을 쓴다 (components/card/cardGrid.js)
+          모바일: 좌우 16px 여백 · 태블릿: 콘텐츠 최대 680px(+ 좌우 24px 여백) · PC: 1240px */}
       <main
         className="
           isolate
           mx-auto
           min-h-screen
           w-full
-          max-w-[1248px]
           px-[16px]
           pt-[20px]
           pb-[37px]
 
-          tablet:px-[20px]
+          tablet:max-w-182
+          tablet:px-6
           tablet:pt-[64px]
           tablet:pb-[224px]
 
+          pc:max-w-310
           pc:px-0
           pc:pb-[240px]
         "
