@@ -23,13 +23,23 @@ const NO_REFRESH_PATHS = [
   "/auth/csrf-token",
 ];
 
+// CSRF 쿠키가 아직 없어 헤더를 붙일 수 없는(붙일 필요도 없는) 경로. 서버(middlewares/csrf.js)의 예외 목록과 같다
+const NO_CSRF_PATHS = ["/auth/signin", "/auth/signup"];
+// 성공하면 서버가 CSRF 쿠키를 새로 심거나(로그인) 지우므로(로그아웃) 보관 중인 값을 버려야 하는 경로
+const CSRF_RESET_PATHS = ["/auth/signin", "/auth/signout"];
+
+const matches = (paths, path) => paths.some((prefix) => path.startsWith(prefix));
+
 // 공통 fetch: JSON으로 보내고 받는다 (body가 FormData면 그대로 보낸다 — Content-Type은 브라우저가 boundary와 함께 채움).
 // 쿠키(httpOnly 토큰)를 함께 보내기 위해 credentials: "include".
+// GET이 아닌 요청에는 X-CSRF-TOKEN 헤더를 자동으로 붙인다 (호출하는 쪽에서 신경 쓸 필요 없음).
 // 브라우저에서 401을 받으면 access 토큰을 한 번 재발급하고 원래 요청을 1회 다시 보낸다.
 // 재발급까지 실패하면 세션 만료를 알리고(onSessionExpired) 원래의 401 에러를 던진다
 export async function apiFetch(path, options = {}) {
   try {
-    return await request(path, options);
+    const data = await send(path, options);
+    if (matches(CSRF_RESET_PATHS, path)) clearCsrfToken();
+    return data;
   } catch (error) {
     if (!shouldRefresh(path, error)) throw error;
 
@@ -40,13 +50,34 @@ export async function apiFetch(path, options = {}) {
     }
 
     try {
-      return await request(path, options);
+      return await send(path, options);
     } catch (retryError) {
       // 새 토큰으로도 401이면 계정 자체를 쓸 수 없는 상태 (예: 삭제된 사용자)
       if (retryError instanceof ApiError && retryError.status === 401) notifySessionExpired();
       throw retryError;
     }
   }
+}
+
+// CSRF 헤더가 필요한 요청이면 붙여서 보낸다.
+// 보관 중인 값이 서버 쿠키와 달라 403(CSRF_TOKEN_INVALID)이 나면 값을 새로 받아 한 번만 다시 보낸다
+async function send(path, options) {
+  const method = (options.method ?? "GET").toUpperCase();
+  if (method === "GET" || typeof window === "undefined" || matches(NO_CSRF_PATHS, path)) {
+    return request(path, options);
+  }
+
+  try {
+    return await request(path, withCsrfHeader(options, await getCsrfToken()));
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.code !== "CSRF_TOKEN_INVALID") throw error;
+    clearCsrfToken();
+    return request(path, withCsrfHeader(options, await getCsrfToken()));
+  }
+}
+
+function withCsrfHeader(options, csrfToken) {
+  return { ...options, headers: { ...options.headers, "X-CSRF-TOKEN": csrfToken } };
 }
 
 async function request(path, { method = "GET", body, headers = {} } = {}) {
@@ -94,7 +125,7 @@ let refreshPromise = null;
 export function refreshSession() {
   refreshPromise ??= (async () => {
     try {
-      await request("/auth/refresh-token", { method: "POST", headers: await csrfHeaders() });
+      await send("/auth/refresh-token", { method: "POST" });
       return true;
     } catch {
       return false;
@@ -115,12 +146,27 @@ export function onSessionExpired(listener) {
 }
 
 function notifySessionExpired() {
+  // 재발급이 실패하면 서버가 CSRF 쿠키까지 지우므로 보관 중인 값도 버린다
+  clearCsrfToken();
   sessionExpiredListeners.forEach((listener) => listener());
 }
 
-// 로그아웃·토큰 재발급·이미지 업로드처럼 상태를 바꾸는 요청에 필요한 CSRF 헤더.
-// 웹과 API 도메인이 달라 쿠키를 직접 읽을 수 없으므로 서버에 값을 물어본 뒤 헤더로 보낸다
-export async function csrfHeaders() {
-  const { csrfToken } = await apiFetch("/auth/csrf-token");
-  return { "X-CSRF-TOKEN": csrfToken };
+// ── CSRF 토큰 (메모리에 보관) ──
+// 웹과 API 도메인이 달라 JS가 CSRF 쿠키를 직접 읽을 수 없으므로 GET /auth/csrf-token으로 값을 받아 둔다.
+// 값은 로그인 동안 바뀌지 않으므로 한 번 받으면 재사용하고, 로그인·로그아웃·세션 만료·403 때만 다시 받는다.
+// 동시에 여러 요청이 처음 값을 필요로 해도 조회는 한 번만 한다
+let csrfTokenPromise = null;
+
+function getCsrfToken() {
+  csrfTokenPromise ??= request("/auth/csrf-token")
+    .then(({ csrfToken }) => csrfToken)
+    .catch((error) => {
+      csrfTokenPromise = null;
+      throw error;
+    });
+  return csrfTokenPromise;
+}
+
+function clearCsrfToken() {
+  csrfTokenPromise = null;
 }

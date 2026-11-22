@@ -1,4 +1,4 @@
-import { apiFetch, csrfHeaders } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 
 // auth 도메인 API (/signup, /login 페이지에서 사용). 소셜 로그인은 API 주소로 이동만 하므로 여기에 없다
 
@@ -23,7 +23,7 @@ export function getCurrentUser() {
 
 // POST /auth/signout — 204
 export async function signout() {
-  return apiFetch("/auth/signout", { method: "POST", headers: await csrfHeaders() });
+  return apiFetch("/auth/signout", { method: "POST" });
 }
 
 // 토큰 재발급(POST /auth/refresh-token)은 api-client.js의 refreshSession()이 401 처리 중에 자동으로 한다

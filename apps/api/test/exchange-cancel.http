@@ -39,33 +39,43 @@ Content-Type: application/json
   "password": "password123"
 }
 
+### CSRF 토큰 조회 — 로그인 후 한 번 실행하면 아래 POST들의 X-CSRF-TOKEN 헤더에 자동으로 채워진다 (GET이 아닌 요청은 모두 필요)
+# @name csrf
+GET {{baseUrl}}/auth/csrf-token
+
 ### ─────────────────────────── 본 테스트 ───────────────────────────
 @exchangeId = 41c41dbf-77ca-47b3-8f6c-099d1b2c5434
 
 ### 1. 정상 취소 → 200 { "data": { "exchangeId", "status": "CANCELED" } } DONE
 #    ▶ offererSignin으로 로그인된 상태에서, 위 준비 순서로 만든 PENDING 상태의 exchangeId로 실행
 POST {{baseUrl}}/exchanges/{{exchangeId}}/cancel
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 ### 2. 없는 exchangeId → 404 { "code": "EXCHANGE_NOT_FOUND" }DONE
 POST {{baseUrl}}/exchanges/{{noSuchExchangeId}}/cancel
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 ### 3. 남의 제시 취소 → 404 { "code": "EXCHANGE_NOT_FOUND" } DONE
 #    ▶ 먼저 위 sellerSignin을 보내서 판매자로 로그인한 다음 이 요청을 보낼 것
 #      (제시자 본인이 아니므로 403이 아니라 404로 응답해야 한다 — 존재 여부를 숨기기 위함)
 POST {{baseUrl}}/exchanges/{{exchangeId}}/cancel
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 ### 4. 이미 수락된 제시 취소 → 404 EXCHANGE_NOT_FOUND 또는 409 (구현에 따라 다름)DONE
 #    ▶ offererSignin으로 되돌아온 뒤, 준비 순서 3)으로 status를 ACCEPTED로 바꾼 exchangeId로 요청
 #      (count===0 원인을 구분하는 선택 구현을 했다면 409, 안 했다면 404로 통일되어 나온다)
 POST {{baseUrl}}/exchanges/{{exchangeId}}/cancel
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 ### 5. 두 번 취소 (이미 CANCELED) → 404 또는 409 (4번과 동일한 이유) DONE
 #    ▶ 1번을 먼저 성공시킨 뒤, 같은 exchangeId로 다시 요청
 POST {{baseUrl}}/exchanges/{{exchangeId}}/cancel
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 ### 6. 토큰 없음 → 401 { "code": "UNAUTHORIZED" }
 #    쿠키를 안 실어 보내려면 REST Client 새 세션(로그인 이력 없는 상태)에서 실행
 POST {{baseUrl}}/exchanges/{{exchangeId}}/cancel
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 
 ### ─────────────────────────── 동시성 실험 (터미널에서 직접) ───────────────────────────

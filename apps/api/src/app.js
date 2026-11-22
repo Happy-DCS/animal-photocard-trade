@@ -2,6 +2,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import { LOCAL_UPLOAD_DIR, LOCAL_UPLOAD_ROUTE, isLocalStorage } from "./lib/image-storage.js";
+import { csrfProtection } from "./middlewares/csrf.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { cardRouter } from "./routes/card.routes.js";
@@ -45,6 +46,9 @@ if (isLocalStorage) {
     }),
   );
 }
+
+// GET이 아닌 API 요청은 로그인·가입을 빼고 모두 CSRF 헤더를 확인한다 (middlewares/csrf.js)
+app.use("/api/v1", csrfProtection);
 
 app.use("/api/v1/health", healthRouter);
 app.use("/api/v1/images", imageRouter);

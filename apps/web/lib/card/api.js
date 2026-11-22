@@ -1,4 +1,4 @@
-import { apiFetch, csrfHeaders } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 
 // card 도메인 API (포토카드 생성 페이지에서 사용)
 
@@ -8,7 +8,6 @@ export async function createCard({ imageId, filterType, name }) {
   return apiFetch("/cards", {
     method: "POST",
     body: { imageId, filterType, name },
-    headers: await csrfHeaders(),
   });
 }
 

@@ -1,7 +1,6 @@
 import { Router } from "express";
 
 import * as userController from "../controllers/user.controller.js";
-import { requireCsrfToken } from "../middlewares/csrf.js";
 import { currentUserRateLimit, randomPointRateLimit } from "../middlewares/rate-limit.js";
 import { requireAuth } from "../middlewares/require-auth.js";
 
@@ -17,6 +16,5 @@ userRouter.post(
   "/me/random-point",
   randomPointRateLimit,
   requireAuth,
-  requireCsrfToken,
   userController.drawRandomPoint,
 );
