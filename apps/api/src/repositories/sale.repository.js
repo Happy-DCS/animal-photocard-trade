@@ -276,6 +276,7 @@ export function findSaleWithExchangesById(id) {
             include: {
               image: true,
               owner: true,
+              creator: CARD_CREATOR_SELECT,
             },
           },
         },

@@ -51,6 +51,7 @@ export default function SaleDetailView({ sale }) {
       category: sale.card.category,
       score: sale.card.score,
       filterType: sale.card.filterType,
+      creator: sale.card.creator,
     },
   };
 
@@ -120,8 +121,9 @@ export default function SaleDetailView({ sale }) {
         <h1 className="font-sans-700 min-w-0 text-2xl leading-snug text-white tablet:flex-1 tablet:text-[38px] pc:text-[40px] pc:leading-13.5">
           {sale.card.tag} {sale.card.name}
         </h1>
+        {/* 판매자 닉네임. 카드 안의 "By 닉네임"(원작자)과 헷갈리지 않도록 by 없이 닉네임만 표시한다 */}
         <p className="font-sans-400 shrink-0 text-xl text-white pc:text-2xl">
-          by {sale.seller.nickname}
+          {sale.seller.nickname}
         </p>
       </div>
 

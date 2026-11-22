@@ -33,6 +33,7 @@ const IMAGE_BOX_HEIGHT = 232;
  *   imageUrl: string,
  *   filterType?: number,
  *   description?: string | null,
+ *   creator?: { id: string, nickname: string } | null,
  *   score?: { axes: { field: string, value: number }[] },
  * }, status?: string, point?: number, isSoldOut?: boolean, isExchanged?: boolean, variant?: "owned" | "sale", onClick?: () => void }} props
  */
@@ -117,11 +118,22 @@ export default function PhotoCard({
           )}
         </div>
 
-        {/* 이름 — 1줄: [태그 머리말], 2줄: 태그 나머지 + 이름. 태그(1등축 색)와 이름이 구분되도록 태그만 색을 입힌다.
+        {/* 이름 — 1줄: [태그 머리말] ↔ 오른쪽 끝에 원작자, 2줄: 태그 나머지 + 이름.
+            태그(1등축 색)와 이름이 구분되도록 태그만 색을 입힌다.
             각 줄은 한 줄로 고정하고, 넘치면 카드에 마우스를 올렸을 때 왼쪽→오른쪽으로 훑어 보여준다 */}
         {/* 폭: 콘텐츠 영역의 좌우 여백(px-2.75)을 뺀 나머지를 전부 쓴다 */}
         <h2 className="font-sans-700 mt-2.5 w-full shrink-0 text-[22px] leading-6.5 text-white">
-          {tagHead && <MarqueeText className={tagColor}>{tagHead}</MarqueeText>}
+          {(tagHead || card.creator) && (
+            <span className="flex items-baseline justify-between gap-2">
+              <MarqueeText className={`min-w-0 ${tagColor}`}>{tagHead}</MarqueeText>
+              {/* 원작자(카드를 처음 만든 사람) — 판매자·소유자와 다를 수 있다. 길면 최대 40% 폭에서 말줄임 */}
+              {card.creator && (
+                <span className="max-w-2/5 shrink-0 truncate font-sans-400 text-[14px] text-gray-200">
+                  By {card.creator.nickname}
+                </span>
+              )}
+            </span>
+          )}
           <MarqueeText>
             {tagRest && <span className={tagColor}>{tagRest} </span>}
             {card.name}

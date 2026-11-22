@@ -17,6 +17,7 @@ export function cardToPhotoCardProps(card) {
       category: card.category,
       score: card.score,
       filterType: card.filterType,
+      creator: card.creator,
     },
   };
 }
@@ -35,6 +36,7 @@ export function saleToPhotoCardProps(sale, hasPendingExchange) {
       category: sale.card.category,
       score: sale.card.score,
       filterType: sale.card.filterType,
+      creator: sale.card.creator,
     },
   };
 }
