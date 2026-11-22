@@ -8,7 +8,7 @@ import { createUserScopedClient } from "./supabase.js";
 // 업로드 이미지를 어디에 둘지 고른다.
 // - SUPABASE_URL·SUPABASE_ANON_KEY가 실제 값이면 Supabase Storage 버킷
 // - 비어 있거나 .env.example의 예시 값 그대로면 로컬 디스크(apps/api/uploads/)에 저장하고 API가 /uploads로 직접 서빙
-const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? "card-images";
+export const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? "card-images";
 const PLACEHOLDER_PATTERN = /your-project|your_anon_key|^$/;
 
 export const LOCAL_UPLOAD_ROUTE = "/uploads";
@@ -29,6 +29,11 @@ export const isLocalStorage = !(
 function getLocalPublicBaseUrl() {
   const base = process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
   return base.replace(/\/+$/, "");
+}
+
+// uploads/ 기준 상대 경로(예: "card-images/seed/image-001.png") → 웹에서 쓸 공개 URL
+export function toLocalImageUrl(relativePath) {
+  return `${getLocalPublicBaseUrl()}${LOCAL_UPLOAD_ROUTE}/${relativePath}`;
 }
 
 // objectPath 예: "<폴더>/<uuid>.png". 저장 후 공개 URL을 돌려준다
@@ -53,7 +58,7 @@ async function saveToLocal({ objectPath, file }) {
     console.error(error);
     throw new ApiError(500, "IMAGE_UPLOAD_FAILED", "이미지 업로드에 실패했습니다");
   }
-  return `${getLocalPublicBaseUrl()}${LOCAL_UPLOAD_ROUTE}/${relativePath}`;
+  return toLocalImageUrl(relativePath);
 }
 
 async function saveToSupabase({ objectPath, file, accessToken }) {

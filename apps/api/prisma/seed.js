@@ -3,7 +3,9 @@ import { pathToFileURL } from "node:url";
 
 import { prisma } from "../src/lib/prisma.js";
 import { deriveCardDescription, deriveCardTag } from "../src/lib/card-flavor.js";
+import { isLocalStorage } from "../src/lib/image-storage.js";
 import { hashPassword } from "../src/lib/password.js";
+import { ensureLocalSeedImages } from "./seed-images.js";
 
 const SEED_ID_NAMESPACES = {
   user: "001",
@@ -76,7 +78,8 @@ const users = [
   },
 ];
 
-// imageUrl은 Supabase Storage(card-images 버킷의 seed/ 경로)에 업로드된 실제 파일을 가리킨다
+// imageUrl은 Supabase Storage(card-images 버킷의 seed/ 경로)에 업로드된 실제 파일을 가리킨다.
+// Supabase 미설정(로컬 저장 모드)이면 seed-images.js가 같은 파일명으로 uploads/card-images/seed/에 이미지를 만들고 그 URL로 바꿔 넣는다
 const images = [
   {
     id: "image-001",
@@ -1240,18 +1243,22 @@ export async function seed(database = prisma, { passwordHash = null } = {}) {
   // ImageData
   // --------------------------------------------------
 
+  // Supabase 미설정(로컬 저장 모드)이면 시드 이미지를 uploads/에 만들어 두고 그 로컬 URL로 연결한다
+  const localUrlById = isLocalStorage ? (await ensureLocalSeedImages(images)).urlById : null;
+
   for (const image of images) {
+    const imageUrl = localUrlById?.get(image.id) ?? image.imageUrl;
     await database.imageData.upsert({
       where: {
         id: image.id,
       },
       update: {
         uploaderId: image.uploaderId,
-        imageUrl: image.imageUrl,
+        imageUrl,
         category: image.category,
         score: image.score,
       },
-      create: image,
+      create: { ...image, imageUrl },
     });
   }
 
