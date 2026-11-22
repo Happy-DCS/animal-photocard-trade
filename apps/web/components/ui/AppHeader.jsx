@@ -13,6 +13,7 @@ const MENU_LINKS = [
   { href: "/market", label: "마켓플레이스" },
   { href: "/my-gallery", label: "마이갤러리" },
   { href: "/my-sales", label: "나의 판매 포토관리" },
+  { href: "/my-page", label: "마이페이지" },
 ];
 const HEADER_LOGO_CLASSNAME = "h-6 w-24 object-contain tablet:h-8 tablet:w-32 pc:h-10 pc:w-40";
 

@@ -215,11 +215,14 @@ async function makeUniqueNickname(baseNickname) {
   );
 }
 
-// 응답에 실을 사용자 정보 (point는 BigInt라 JSON으로 바로 못 보내므로 숫자로 바꾼다)
+// 로그인한 본인에게 돌려주는 사용자 정보 (point는 BigInt라 JSON으로 바로 못 보내므로 숫자로 바꾼다).
+// email·provider는 로그인 직후 바로 마이페이지에 가도 로그인 방식(비밀번호 변경 가능 여부)을 알 수 있게 함께 준다
 export function toPublicUser(user) {
   return {
     id: user.id,
     nickname: user.nickname,
+    email: user.email,
+    provider: user.provider,
     point: Number(user.point),
     lastDrawAt: user.lastDrawAt,
     createdAt: user.createdAt,

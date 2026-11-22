@@ -156,16 +156,20 @@ export function AuthProvider({ children }) {
   }, [currentUserId, patchCurrentUser, reloadCurrentUser]);
 
   //앱전체 로그아웃 함수
-  const logout = useCallback(async () => {
-    // 보호 페이지의 비로그인 게이트가 로그아웃 이동을 /login으로 바꾸지 않도록 한다.
-    isLoggingOutRef.current = pathname !== LOGOUT_REDIRECT_PATH;
-    try {
-      await signout();
-    } finally {
-      setCurrentUser(null);
-      router.replace(LOGOUT_REDIRECT_PATH);
-    }
-  }, [pathname, router]);
+  // skipSignout: 회원 탈퇴처럼 서버가 이미 세션·쿠키를 지운 경우 로그아웃 API 없이 화면 상태만 정리한다
+  const logout = useCallback(
+    async ({ skipSignout = false } = {}) => {
+      // 보호 페이지의 비로그인 게이트가 로그아웃 이동을 /login으로 바꾸지 않도록 한다.
+      isLoggingOutRef.current = pathname !== LOGOUT_REDIRECT_PATH;
+      try {
+        if (!skipSignout) await signout();
+      } finally {
+        setCurrentUser(null);
+        router.replace(LOGOUT_REDIRECT_PATH);
+      }
+    },
+    [pathname, router],
+  );
 
   //context생성
   const value = useMemo(
