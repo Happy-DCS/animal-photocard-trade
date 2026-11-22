@@ -137,50 +137,12 @@ export default function MarketPage() {
 
   /**
    * ========================================
-   * 카테고리별 판매 개수 조회
-   * GET /sales
-   * ========================================
-   */
-  const fetchCategoryCounts = useCallback(async () => {
-    try {
-      const fetchCount = async (category, includeSoldOut) => {
-        const result = await getSales({
-          limit: 1,
-          category,
-          includeSoldOut,
-          // 검색어가 있다면 검색 결과 기준으로 카운팅
-          keyword: debouncedKeyword.trim() || undefined,
-        });
-
-        return typeof result?.totalCount === "number" ? result.totalCount : 0;
-      };
-
-      const [dogExcluded, catExcluded, dogIncluded, catIncluded] = await Promise.all([
-        fetchCount("DOG", false),
-        fetchCount("CAT", false),
-        fetchCount("DOG", true),
-        fetchCount("CAT", true),
-      ]);
-
-      setCountsBySoldOut({
-        false: { DOG: dogExcluded, CAT: catExcluded },
-        true: { DOG: dogIncluded, CAT: catIncluded },
-      });
-    } catch (error) {
-      console.error("카테고리별 판매 개수 조회 실패:", error);
-
-      setCountsBySoldOut({
-        false: { DOG: 0, CAT: 0 },
-        true: { DOG: 0, CAT: 0 },
-      });
-    }
-  }, [debouncedKeyword]);
-
-  /**
-   * ========================================
    * 판매 목록 조회
    * GET /sales
    * ========================================
+   *
+   * 첫 페이지 요청에는 includeCounts를 붙여 모바일 필터용 카테고리별 개수(categoryCounts)를 함께 받는다.
+   * 커서로 다음 페이지를 받을 때는 서버가 개수를 보내지 않으므로 기존 값을 그대로 둔다
    */
   const fetchSales = useCallback(
     async ({ cursor = null, append = false } = {}) => {
@@ -214,7 +176,15 @@ export default function MarketPage() {
           includeSoldOut: isSoldOutIncluded,
           orderBy: ORDER_BY_MAP[sort],
           cursor: cursor ?? undefined,
+          includeCounts: !append,
         });
+
+        if (result?.categoryCounts) {
+          setCountsBySoldOut({
+            false: result.categoryCounts.excludeSoldOut, // 품절 제외
+            true: result.categoryCounts.includeSoldOut, // 품절 포함
+          });
+        }
 
         const lists = result?.lists ?? [];
         const newCursor = result?.nextCursor ?? null;
@@ -260,9 +230,7 @@ export default function MarketPage() {
       cursor: null,
       append: false,
     });
-
-    fetchCategoryCounts();
-  }, [fetchSales, fetchCategoryCounts]);
+  }, [fetchSales]);
 
   /**
    * ========================================
@@ -535,8 +503,6 @@ export default function MarketPage() {
             cursor: null,
             append: false,
           });
-
-          fetchCategoryCounts();
         }}
       />
 

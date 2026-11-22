@@ -12,6 +12,8 @@ export function getSales({
   orderBy,
   cursor,
   page,
+  // true면 첫 페이지 응답에 categoryCounts({ excludeSoldOut: { DOG, CAT }, includeSoldOut: { DOG, CAT } })가 함께 온다
+  includeCounts,
 } = {}) {
   const params = new URLSearchParams();
 
@@ -29,6 +31,7 @@ export function getSales({
 
   // 페이지 번호 기반 페이지네이션을 사용하는 경우 page를 쿼리에 추가
   if (page !== undefined) params.set("page", String(page));
+  if (includeCounts) params.set("includeCounts", "true");
 
   const queryString = params.toString();
 
