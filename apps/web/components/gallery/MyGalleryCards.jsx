@@ -135,7 +135,7 @@ export default function MyGalleryCards({ userName }) {
         )}
       </div>
 
-      <CardPreviewModal cardProps={previewCardProps} onClose={closePreview} />
+      <CardPreviewModal cardProps={previewCardProps} onClose={closePreview} allowDownload />
     </>
   );
 }

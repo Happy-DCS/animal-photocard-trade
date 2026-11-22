@@ -42,6 +42,9 @@ if (isLocalStorage) {
         res.set("X-Content-Type-Options", "nosniff");
         // 웹(3000)이 다른 출처에서 <img>/next/image로 불러갈 수 있게 한다
         res.set("Cross-Origin-Resource-Policy", "cross-origin");
+        // 카드 이미지 다운로드(html-to-image)·도트 필터(canvas)는 이미지를 fetch/픽셀로 읽어야 해서 CORS 허용이 필요하다.
+        // 누구나 볼 수 있는 공개 이미지이고 쿠키도 쓰지 않으므로 모든 출처(*)를 허용한다 (Supabase 공개 버킷과 같은 정책)
+        res.set("Access-Control-Allow-Origin", "*");
       },
     }),
   );

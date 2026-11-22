@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 
 import CardBack from "./CardBack";
+import CardDownloadButton from "./CardDownloadButton";
 import FlipCard from "./FlipCard";
 import ScaledPhotoCard from "./ScaledPhotoCard";
 import TiltCard from "./TiltCard";
@@ -12,10 +13,11 @@ import TiltCard from "./TiltCard";
 // 클릭하면 뒷면(CardBack)으로 뒤집힌다(FlipCard).
 // 배경(어두운 막)을 누르거나, 닫기 버튼, Esc 키로 닫는다
 /**
- * @param {{ cardProps: object | null, onClose: () => void }} props
+ * @param {{ cardProps: object | null, onClose: () => void, allowDownload?: boolean }} props
  *   cardProps: ScaledPhotoCard(PhotoCard)에 넘길 props. null이면 닫힌 상태
+ *   allowDownload: 카드 앞면을 PNG로 저장하는 버튼 표시 (내 카드를 보는 마이갤러리에서만 켠다)
  */
-export default function CardPreviewModal({ cardProps, onClose }) {
+export default function CardPreviewModal({ cardProps, onClose, allowDownload = false }) {
   const isOpen = cardProps !== null;
 
   useEffect(() => {
@@ -56,10 +58,11 @@ export default function CardPreviewModal({ cardProps, onClose }) {
       </button>
 
       {/* 카드 영역 클릭은 배경 클릭(닫기)으로 번지지 않게 막는다.
-          폭: 화면 폭의 88% 또는 화면 높이의 88%에 카드 비율(400:586)을 적용한 값 중 작은 쪽 */}
+          폭: 화면 폭의 88% 또는 화면 높이의 76%(아래 안내·다운로드 버튼 자리를 남김)에
+          카드 비율(400:586)을 적용한 값 중 작은 쪽 */}
       <div
         onClick={(event) => event.stopPropagation()}
-        style={{ width: "min(88vw, calc(88vh * 400 / 586), 440px)" }}
+        style={{ width: "min(88vw, calc(76vh * 400 / 586), 440px)" }}
       >
         <TiltCard>
           {/* 모달이 닫히면 통째로 사라지므로, 다시 열 때는 항상 앞면부터 보인다 */}
@@ -69,6 +72,8 @@ export default function CardPreviewModal({ cardProps, onClose }) {
           />
         </TiltCard>
         <p className="mt-4 text-center text-sm text-gray-300">카드를 클릭하면 뒤집혀요</p>
+        {/* 뒤집혀 있어도 항상 앞면을 저장한다 */}
+        {allowDownload && <CardDownloadButton cardProps={cardProps} />}
       </div>
     </div>,
     document.body,
