@@ -1,5 +1,6 @@
 import { prisma } from "../src/lib/prisma.js";
 import { deriveCardDescription, deriveCardTag } from "../src/lib/card-flavor.js";
+import { hashPassword } from "../src/lib/password.js";
 
 const SEED_ID_NAMESPACES = {
   user: "001",
@@ -25,7 +26,7 @@ const users = [
     nickname: "냥냥이",
     email: "nyangnyang@example.com",
     provider: "local",
-    providerUid: "google-user-001",
+    providerUid: null,
     point: 2000n,
     lastDrawAt: new Date("2026-09-05T09:30:00.000Z"),
     createdAt: new Date("2026-08-20T10:00:00.000Z"),
@@ -35,7 +36,7 @@ const users = [
     nickname: "멍멍이",
     email: "meongmeong@example.com",
     provider: "local",
-    providerUid: "kakao-user-002",
+    providerUid: null,
     point: 1800n,
     lastDrawAt: new Date("2026-09-06T11:20:00.000Z"),
     createdAt: new Date("2026-08-21T14:30:00.000Z"),
@@ -45,7 +46,7 @@ const users = [
     nickname: "초코집사",
     email: "choco@example.com",
     provider: "local",
-    providerUid: "google-user-003",
+    providerUid: null,
     point: 900n,
     lastDrawAt: new Date("2026-09-04T08:45:00.000Z"),
     createdAt: new Date("2026-08-22T09:15:00.000Z"),
@@ -55,7 +56,7 @@ const users = [
     nickname: "구름이",
     email: "cloud@example.com",
     provider: "local",
-    providerUid: "kakao-user-004",
+    providerUid: null,
     point: 600n,
     lastDrawAt: new Date("2026-09-06T15:10:00.000Z"),
     createdAt: new Date("2026-08-24T16:20:00.000Z"),
@@ -65,7 +66,7 @@ const users = [
     nickname: "복실이",
     email: "boksil@example.com",
     provider: "local",
-    providerUid: "google-user-005",
+    providerUid: null,
     point: 350n,
     lastDrawAt: new Date("2026-09-05T13:00:00.000Z"),
     createdAt: new Date("2026-08-26T11:40:00.000Z"),
@@ -1208,14 +1209,13 @@ for (const notification of notifications) {
   notification.targetId = toSeedUuid(notification.targetId);
 }
 
-export async function seed(database = prisma, { providerUidByEmail = new Map() } = {}) {
+// passwordHash를 넘기면 데모 계정 5명 모두 그 비밀번호로 로그인할 수 있다 (reseed.js가 SEED_USER_PASSWORD로 만든다)
+export async function seed(database = prisma, { passwordHash = null } = {}) {
   // --------------------------------------------------
   // User
   // --------------------------------------------------
 
   for (const user of users) {
-    const providerUid = providerUidByEmail.get(user.email) ?? user.providerUid;
-
     await database.user.upsert({
       where: {
         id: user.id,
@@ -1224,11 +1224,12 @@ export async function seed(database = prisma, { providerUidByEmail = new Map() }
         nickname: user.nickname,
         email: user.email,
         provider: user.provider,
-        providerUid,
+        providerUid: user.providerUid,
+        passwordHash,
         point: user.point,
         lastDrawAt: user.lastDrawAt,
       },
-      create: { ...user, providerUid },
+      create: { ...user, passwordHash },
     });
   }
 
@@ -1340,8 +1341,11 @@ export async function seed(database = prisma, { providerUidByEmail = new Map() }
 
 const isDirectRun = process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href;
 
+// SEED_USER_PASSWORD가 있으면 데모 계정에 그 비밀번호를 심는다 (없으면 데모 계정으로는 로그인 불가)
 if (isDirectRun)
-  seed()
+  Promise.resolve(process.env.SEED_USER_PASSWORD)
+    .then((password) => (password ? hashPassword(password) : null))
+    .then((passwordHash) => seed(prisma, { passwordHash }))
     .catch((error) => {
       console.error("Seed 실패");
       console.error(error);

@@ -1,7 +1,6 @@
 # VS Code "REST Client" 확장으로 실행: 요청 위의 "Send Request"를 누른다.
-# 준비: apps/api/.env에 DATABASE_URL·SUPABASE_URL·SUPABASE_ANON_KEY를 채우고 `npm run dev` (포트 4000)
+# 준비: apps/api/.env에 DATABASE_URL·JWT_ACCESS_SECRET(소셜은 GOOGLE_*)을 채우고 `npm run dev` (포트 4000)
 # {{$randomInt 1000 9999}}는 요청마다 새 숫자가 들어가서 이메일·닉네임이 겹치지 않는다.
-# Supabase는 example.com 같은 예약 도메인 이메일을 거절하므로 실제 도메인(gmail.com)을 쓴다.
 
 @baseUrl = http://localhost:4000/api/v1
 @dupEmail = dup-test@gmail.com
@@ -106,7 +105,7 @@ Content-Type: application/json
 # 로그아웃·재발급은 X-CSRF-TOKEN 헤더가 필요하다. 로그인 뒤 아래 "CSRF 토큰 조회" 요청을 한 번 보내면
 # 그 응답값이 {{csrf.response.body.data.csrfToken}} 으로 자동 채워진다 (REST Client 요청 변수).
 
-### 로그인 → 200 { "data": { "user", "accessToken", "refreshToken" } } + Set-Cookie 3개(accessToken, refreshToken, csrfToken)
+### 로그인 → 200 { "data": { "user" } } + Set-Cookie 3개(accessToken, refreshToken[path=/api/v1/auth], csrfToken)
 POST {{baseUrl}}/auth/signin
 Content-Type: application/json
 
@@ -137,7 +136,7 @@ Content-Type: application/json
 # @name csrf
 GET {{baseUrl}}/auth/csrf-token
 
-### 토큰 재발급 → 200 { "data": { "accessToken" } } (refreshToken 쿠키 + CSRF 헤더 필요)
+### 토큰 재발급 → 204 + 새 accessToken·refreshToken 쿠키 (refreshToken 쿠키 + CSRF 헤더 필요). 같은 refreshToken을 다시 쓰면 401 REFRESH_TOKEN_INVALID
 POST {{baseUrl}}/auth/refresh-token
 X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
@@ -148,17 +147,13 @@ POST {{baseUrl}}/auth/refresh-token
 POST {{baseUrl}}/auth/signout
 X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
-### 소셜 로그인 콜백 (토큰이 잘못됨) → 401 { "code": "INVALID_SOCIAL_TOKEN" }
-POST {{baseUrl}}/auth/social/callback
-Content-Type: application/json
 
-{
-  "supabaseAccessToken": "not-a-real-token"
-}
-
-### 소셜 로그인 시작 → 302, Location 이 Supabase OAuth 주소 (브라우저에서 열면 Google 로그인 화면으로 이동)
-# REST Client는 리다이렉트를 따라가므로 응답이 Google/Supabase HTML로 보일 수 있다. 실제 확인은 브라우저 주소창에 아래 URL 입력
+### 소셜 로그인 시작 → 302, Location 이 Google OAuth 주소 + oauthState 쿠키 (브라우저에서 열면 Google 로그인 화면으로 이동)
+# REST Client는 리다이렉트를 따라가므로 응답이 Google HTML로 보일 수 있다. 실제 확인은 브라우저 주소창에 아래 URL 입력
 GET {{baseUrl}}/auth/social/google
 
 ### 지원하지 않는 provider → 400 { "code": "VALIDATION_ERROR" }
 GET {{baseUrl}}/auth/social/naver
+
+### 소셜 콜백 state 불일치 → 302, Location 이 {WEB_URL}/login?error=INVALID_SOCIAL_TOKEN
+GET {{baseUrl}}/auth/social/google/callback?code=fake&state=wrong

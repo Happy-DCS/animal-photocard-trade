@@ -10,7 +10,7 @@ export function signup({ email, nickname, password, passwordConfirm }) {
   });
 }
 
-// POST /auth/signin — 성공하면 { user, accessToken, refreshToken }. 토큰은 httpOnly 쿠키에도 심어진다
+// POST /auth/signin — 성공하면 { user }. 토큰은 httpOnly 쿠키로만 심어진다 (JS에서 읽을 수 없음)
 export function signin({ email, password }) {
   return apiFetch("/auth/signin", { method: "POST", body: { email, password } });
 }
@@ -25,7 +25,7 @@ export async function signout() {
   return apiFetch("/auth/signout", { method: "POST", headers: await csrfHeaders() });
 }
 
-// POST /auth/refresh-token — 성공하면 { accessToken }
+// POST /auth/refresh-token — 204. 새 access·refresh 토큰이 쿠키로 교체된다
 export async function refreshAccessToken() {
   return apiFetch("/auth/refresh-token", { method: "POST", headers: await csrfHeaders() });
 }

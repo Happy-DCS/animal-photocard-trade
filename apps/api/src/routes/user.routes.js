@@ -7,7 +7,7 @@ import { requireAuth } from "../middlewares/require-auth.js";
 
 export const userRouter = Router();
 
-userRouter.get("/me", currentUserRateLimit, userController.me);
+userRouter.get("/me", currentUserRateLimit, requireAuth, userController.me);
 
 // 현재 사용자의 랜덤 포인트 추첨을 처리
 userRouter.post(

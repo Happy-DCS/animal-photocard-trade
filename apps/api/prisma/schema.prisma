@@ -44,12 +44,16 @@ model User {
   id          String    @id @default(uuid())
   nickname    String    @unique
   email       String    @unique
-  provider    String
-  providerUid String
-  point       BigInt    @default(0)
-  lastDrawAt  DateTime?
-  createdAt   DateTime  @default(now())
+  // "local"(이메일/비밀번호) 또는 "google". providerUid는 소셜 계정의 고유 ID(Google sub)이며 local은 null
+  provider     String
+  providerUid  String?
+  // local 계정의 scrypt 해시 (lib/password.js 형식). 소셜 계정은 null
+  passwordHash String?
+  point        BigInt    @default(0)
+  lastDrawAt   DateTime?
+  createdAt    DateTime  @default(now())
 
+  refreshTokens RefreshToken[]
   notifications Notification[]
   uploads       ImageData[]
   ownedCards    Card[]     @relation("CardOwner")
@@ -139,3 +143,17 @@ model Exchange {
 // @@index([cardId, status])              on Sale
 // @@index([userId, deletedAt])           on Notification
 // @@index([category])                    on ImageData
+
+// 로그인 세션별 리프레시 토큰. 원문은 쿠키로만 내려가고 DB에는 SHA-256 해시만 저장한다.
+// 재발급할 때마다 기존 행을 지우고 새 행을 만든다(rotation)
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

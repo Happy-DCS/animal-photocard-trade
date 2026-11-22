@@ -12,20 +12,12 @@ export function findUserByNickname(nickname) {
   return prisma.user.findUnique({ where: { nickname } });
 }
 
-export function findUserByProviderUid(providerUid) {
-  return prisma.user.findFirst({ where: { providerUid } });
+export function findUserByProvider(provider, providerUid) {
+  return prisma.user.findUnique({ where: { provider_providerUid: { provider, providerUid } } });
 }
 
-export function createUser({ email, nickname, provider, providerUid }) {
-  return prisma.user.create({ data: { email, nickname, provider, providerUid } });
-}
-
-export function updateProviderUid(id, providerUid) {
-  return prisma.user.update({ where: { id }, data: { providerUid } });
-}
-
-export function deleteUser(id) {
-  return prisma.user.delete({ where: { id } });
+export function createUser({ email, nickname, provider, providerUid = null, passwordHash = null }) {
+  return prisma.user.create({ data: { email, nickname, provider, providerUid, passwordHash } });
 }
 
 //유저 포인트 감소 트랜잭션

@@ -1,12 +1,8 @@
 import { ApiError } from "../lib/api-error.js";
 import { prisma } from "../lib/prisma.js";
 import { getUserChannelTopic } from "../lib/realtime.js";
-import { createAuthClient } from "../lib/supabase.js";
 import { countUnread } from "../repositories/notification.repository.js";
-import {
-  findUserByProviderUid,
-  grantRandomPointIfAvailable,
-} from "../repositories/user.repository.js";
+import { grantRandomPointIfAvailable } from "../repositories/user.repository.js";
 
 // 랜덤 포인트별 누적 당첨 확률을 관리
 const RANDOM_POINT_REWARDS = [
@@ -42,23 +38,8 @@ function getKstDayBounds(now = new Date()) {
   };
 }
 
-// GET /users/me
-export async function getCurrentUser(accessToken) {
-  if (!accessToken) {
-    throw new ApiError(401, "UNAUTHORIZED", "로그인이 필요합니다");
-  }
-
-  const supabase = createAuthClient();
-  const { data, error } = await supabase.auth.getUser(accessToken);
-  if (error || !data.user) {
-    throw new ApiError(401, "UNAUTHORIZED", "로그인이 필요합니다");
-  }
-
-  const user = await findUserByProviderUid(data.user.id);
-  if (!user) {
-    throw new ApiError(401, "UNAUTHORIZED", "로그인이 필요합니다");
-  }
-
+// GET /users/me — 인증은 requireAuth가 끝낸 상태로, req.user를 받는다
+export async function getCurrentUser(user) {
   const unreadCount = await countUnread(user.id);
   return {
     id: user.id,

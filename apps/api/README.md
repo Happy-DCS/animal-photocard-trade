@@ -1,6 +1,6 @@
 # api
 
-백엔드 API 서버 (포트 4000). DB는 Postgres + Prisma, 인증은 Supabase Auth. Node 22.9 이상 필요
+백엔드 API 서버 (포트 4000). DB는 Postgres(Supabase 호스팅) + Prisma, 인증은 API가 직접 처리(JWT access + DB refresh, Google OAuth). Node 22.9 이상 필요
 
 ## 구조
 
@@ -25,6 +25,8 @@ src/
 
 ## Supabase Storage (이미지 업로드용) 수동 설정
 
+> ⚠️ 인증을 API로 옮기면서 아래 RLS 정책(`auth.uid()` 비교)은 더 이상 통과하지 못한다. Storage 업로드 방식은 새로 반영할 예정이다.
+
 `POST /images/upload`는 Supabase Storage에 파일을 올린다. 코드만으로는 버킷이 안 생기므로, Supabase 대시보드에서 한 번만 설정한다 (지금 공용 개발 DB엔 이미 되어 있음 — 새 프로젝트로 옮길 때만 다시 필요).
 
 1. Storage → New bucket → 이름 `card-images` (`.env`의 `SUPABASE_STORAGE_BUCKET`과 동일하게), **Public bucket** 체크
@@ -43,6 +45,6 @@ src/
 ## 테스트
 
 - `test/health.http`: 서버 상태, 404
-- `test/auth.http`: 회원가입(201·409·400), 로그인(200·401·400), 토큰 재발급·로그아웃(CSRF 헤더 필요, 403), 소셜 콜백(401) 케이스
+- `test/auth.http`: 회원가입(201·409·400), 로그인(200·401·400), 토큰 재발급·로그아웃(CSRF 헤더 필요, 403), 소셜 로그인 시작(302·400) 케이스
 - `test/images.http`: 이미지 업로드 (인증·CSRF 필요, 201·400·401·403)
 - `test/cards.http`: 카드 생성 (인증·CSRF 필요, 201·400·401·403·404·409)
