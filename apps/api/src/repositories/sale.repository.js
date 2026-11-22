@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { CARD_CREATOR_SELECT } from "./card.repository.js";
 
 // sellerId(판매자) 또는 offererId(교환 제시자)로 조회 조건을 생성.
 // 둘 다 있으면 "내가 판매자이거나, 내가 대기 중인 교환을 제시한" 판매글을 OR로 묶는다
@@ -108,6 +109,7 @@ export function findSales({
       card: {
         include: {
           image: true,
+          creator: CARD_CREATOR_SELECT,
         },
       },
 
@@ -123,6 +125,7 @@ export function findSales({
           offerCard: {
             include: {
               image: true,
+              creator: CARD_CREATOR_SELECT,
             },
           },
         },
@@ -265,7 +268,7 @@ export function findSaleWithExchangesById(id) {
   return prisma.sale.findUnique({
     where: { id },
     include: {
-      card: { include: { image: true } },
+      card: { include: { image: true, creator: CARD_CREATOR_SELECT } },
       seller: true,
       exchanges: {
         include: {

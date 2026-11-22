@@ -80,6 +80,7 @@ export async function getSales({
           image: myOffer.offerCard.image.imageUrl,
           filterType: myOffer.offerCard.filterType,
           category: myOffer.offerCard.image.category,
+          creator: toCreator(myOffer.offerCard.creator),
         }
       : {
           id: sale.card.id,
@@ -89,6 +90,7 @@ export async function getSales({
           image: sale.card.image.imageUrl,
           filterType: sale.card.filterType,
           category: sale.card.image.category,
+          creator: toCreator(sale.card.creator),
         };
 
     return {
@@ -363,6 +365,7 @@ function toExchangeResponse(exchange) {
       imageUrl: offerCard.image.imageUrl,
       category: offerCard.image.category,
       score: offerCard.image.score,
+      creator: toCreator(offerCard.creator),
     },
   };
 }
@@ -440,6 +443,7 @@ export async function getSaleById(id) {
       image: sale.card.image.imageUrl,
       filterType: sale.card.filterType,
       category: sale.card.image.category,
+      creator: toCreator(sale.card.creator),
     },
     seller: { id: sale.seller.id, nickname: sale.seller.nickname },
     description: sale.description,
@@ -521,4 +525,9 @@ export async function cancelSale(id, seller) {
 
   await notifyUsersChanged(offererIds);
   return result;
+}
+
+// 카드 원작자(처음 만든 사람) 응답 형태. 판매자·소유자와 다를 수 있다
+function toCreator(creator) {
+  return creator ? { id: creator.id, nickname: creator.nickname } : null;
 }

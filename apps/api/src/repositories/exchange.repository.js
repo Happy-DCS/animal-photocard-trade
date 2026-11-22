@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { CARD_CREATOR_SELECT } from "./card.repository.js";
 
 //판매글에 해당하는 교환 제시건 찾기
 export function findPendingExchangesWithOfferer(tx, saleId) {
@@ -88,6 +89,7 @@ export function findPendingExchangesBySaleId({ saleId, offererId }) {
           description: true,
           filterType: true,
           owner: { select: { id: true, nickname: true } },
+          creator: CARD_CREATOR_SELECT,
           image: { select: { imageUrl: true, category: true, score: true } },
         },
       },

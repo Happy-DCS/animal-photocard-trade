@@ -171,6 +171,8 @@ function toCardResponse(card) {
     id: card.id,
     ownerId: card.ownerId,
     createdById: card.createdById,
+    // 원작자(처음 만든 사람). 소유자(ownerId)는 거래로 바뀌지만 원작자는 바뀌지 않는다
+    creator: { id: card.creator.id, nickname: card.creator.nickname },
     imageId: card.imageId,
     name: card.name,
     category: card.image.category,
