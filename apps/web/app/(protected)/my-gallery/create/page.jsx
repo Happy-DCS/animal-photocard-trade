@@ -22,6 +22,8 @@ const CATEGORIES = [
 const CARD_ASPECT = 400 / 232;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
+// 슬라이더 양옆 −/+ 버튼을 한 번 누를 때 바뀌는 확대 비율
+const ZOOM_STEP = 0.2;
 const INITIAL_CROP = { x: 0, y: 0 };
 
 // 아이폰 HEIC는 대부분 브라우저(Safari 제외)가 <img>로 표시하지 못해서, 선택 즉시 JPEG로 바꿔둔다.
@@ -305,8 +307,16 @@ export default function CreatePage() {
                     )}
                   </div>
                   {selectedUrl && (
-                    <label className="flex items-center gap-3 text-sm text-gray-200">
-                      <span className="shrink-0">확대</span>
+                    <div className="flex items-center gap-3 text-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => setZoom((value) => Math.max(MIN_ZOOM, value - ZOOM_STEP))}
+                        disabled={zoom <= MIN_ZOOM}
+                        aria-label="이미지 축소"
+                        className="flex size-8 shrink-0 items-center justify-center text-xl leading-none hover:text-white disabled:opacity-40"
+                      >
+                        −
+                      </button>
                       <input
                         type="range"
                         min={MIN_ZOOM}
@@ -317,7 +327,16 @@ export default function CreatePage() {
                         className="w-full accent-purple-button"
                         aria-label="이미지 확대 비율"
                       />
-                    </label>
+                      <button
+                        type="button"
+                        onClick={() => setZoom((value) => Math.min(MAX_ZOOM, value + ZOOM_STEP))}
+                        disabled={zoom >= MAX_ZOOM}
+                        aria-label="이미지 확대"
+                        className="flex size-8 shrink-0 items-center justify-center text-xl leading-none hover:text-white disabled:opacity-40"
+                      >
+                        +
+                      </button>
+                    </div>
                   )}
                   <div className="flex h-auto w-full gap-2 pc:gap-3.75">
                     {VARIANTS.map(({ key, label }) => {
