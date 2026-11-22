@@ -4,7 +4,10 @@ import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
+import CardBack from "@/components/card/CardBack";
+import FlipCard from "@/components/card/FlipCard";
 import ScaledPhotoCard from "@/components/card/ScaledPhotoCard";
+import TiltCard from "@/components/card/TiltCard";
 import BuyerActionButtons from "@/components/trade/BuyerActionButtons";
 import BuyerExchangeList from "@/components/trade/BuyerExchangeList";
 import ExchangeListView from "@/components/trade/ExchangeListView";
@@ -124,8 +127,14 @@ export default function SaleDetailView({ sale }) {
 
       <div className="mt-6 grid gap-6 tablet:mt-10 pc:grid-cols-[minmax(0,1fr)_400px] pc:gap-8.5">
         <div className="flex items-center justify-center rounded-2xl bg-[linear-gradient(70deg,#616161_0%,#878787_100%)] p-6 tablet:rounded-3xl tablet:p-10 pc:aspect-square">
+          {/* 마이갤러리 크게 보기와 같은 효과: 포인터에 따라 기울어지고(TiltCard), 클릭하면 뒷면으로 뒤집힌다(FlipCard) */}
           <div className="w-full max-w-42 tablet:max-w-90">
-            <ScaledPhotoCard {...cardProps} />
+            <TiltCard>
+              <FlipCard front={<ScaledPhotoCard {...cardProps} />} back={<CardBack />} />
+            </TiltCard>
+            <p className="mt-3 text-center text-xs text-gray-200 tablet:text-sm">
+              카드를 클릭하면 뒤집혀요
+            </p>
           </div>
         </div>
 
