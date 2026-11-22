@@ -3,10 +3,13 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 
+import CardBack from "./CardBack";
+import FlipCard from "./FlipCard";
 import ScaledPhotoCard from "./ScaledPhotoCard";
 import TiltCard from "./TiltCard";
 
-// 카드를 화면 정중앙에 크게 띄워 보는 모달. 카드에는 3D 틸트 효과(TiltCard)가 걸려 있다.
+// 카드를 화면 정중앙에 크게 띄워 보는 모달. 카드에는 3D 틸트 효과(TiltCard)가 걸려 있고,
+// 클릭하면 뒷면(CardBack)으로 뒤집힌다(FlipCard).
 // 배경(어두운 막)을 누르거나, 닫기 버튼, Esc 키로 닫는다
 /**
  * @param {{ cardProps: object | null, onClose: () => void }} props
@@ -59,8 +62,13 @@ export default function CardPreviewModal({ cardProps, onClose }) {
         style={{ width: "min(88vw, calc(88vh * 400 / 586), 440px)" }}
       >
         <TiltCard>
-          <ScaledPhotoCard {...cardProps} onClick={undefined} />
+          {/* 모달이 닫히면 통째로 사라지므로, 다시 열 때는 항상 앞면부터 보인다 */}
+          <FlipCard
+            front={<ScaledPhotoCard {...cardProps} onClick={undefined} />}
+            back={<CardBack />}
+          />
         </TiltCard>
+        <p className="mt-4 text-center text-sm text-gray-300">카드를 클릭하면 뒤집혀요</p>
       </div>
     </div>,
     document.body,
