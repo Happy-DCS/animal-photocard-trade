@@ -1,0 +1,25 @@
+# 로컬 개발용 PostgreSQL. `docker compose up -d` 로 띄우고 apps/api/.env의 DATABASE_URL·DIRECT_URL을 아래 주소로 맞춘다
+#   postgresql://postgres:postgres@localhost:5432/animal_photocard?schema=public
+# 데이터는 pgdata 볼륨에 남는다. 완전히 지우려면 `docker compose down -v`
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: animal-photocard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: animal_photocard
+      TZ: Asia/Seoul
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d animal_photocard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
