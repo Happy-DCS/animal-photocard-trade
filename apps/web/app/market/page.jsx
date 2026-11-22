@@ -99,8 +99,11 @@ export default function MarketPage() {
 
   const observerRef = useRef(null);
 
-  // 요청 중복 방지
+  // 목록 요청이 진행 중인지 (다음 페이지 중복 요청 방지용)
   const isFetchingRef = useRef(false);
+
+  // 목록 요청마다 1씩 증가하는 번호. 가장 최근 요청의 응답만 화면에 반영하는 데 쓴다
+  const requestIdRef = useRef(0);
 
   // 검색어는 입력이 멈춘 뒤 300ms 후에만 요청에 반영
   useEffect(() => {
@@ -146,10 +149,15 @@ export default function MarketPage() {
    */
   const fetchSales = useCallback(
     async ({ cursor = null, append = false } = {}) => {
-      // 이미 요청 중이면 중복 요청 방지
-      if (isFetchingRef.current) {
+      // 다음 페이지(append)는 이미 요청 중이면 건너뛴다 (무한 스크롤 중복 요청 방지).
+      // 첫 페이지(필터·검색·정렬 변경)는 진행 중인 요청이 있어도 항상 새로 보내고, 이전 요청의 응답은 버린다
+      if (append && isFetchingRef.current) {
         return;
       }
+
+      const requestId = ++requestIdRef.current;
+      // 늦게 도착한 이전 조건의 응답이 화면을 덮어쓰지 않도록, 가장 최근 요청의 응답만 반영한다
+      const isLatest = () => requestId === requestIdRef.current;
 
       isFetchingRef.current = true;
 
@@ -179,6 +187,8 @@ export default function MarketPage() {
           includeCounts: !append,
         });
 
+        if (!isLatest()) return;
+
         if (result?.categoryCounts) {
           setCountsBySoldOut({
             false: result.categoryCounts.excludeSoldOut, // 품절 제외
@@ -200,6 +210,8 @@ export default function MarketPage() {
         setNextCursor(newCursor);
         setHasMore(Boolean(newCursor));
       } catch (error) {
+        if (!isLatest()) return;
+
         console.error("판매 목록 조회 실패:", error);
 
         if (!append) {
@@ -209,9 +221,12 @@ export default function MarketPage() {
         setNextCursor(null);
         setHasMore(false);
       } finally {
-        isFetchingRef.current = false;
-        setIsLoading(false);
-        setIsLoadingMore(false);
+        // 버려진 요청이 끝났을 때는 최신 요청의 진행 상태를 건드리지 않는다
+        if (isLatest()) {
+          isFetchingRef.current = false;
+          setIsLoading(false);
+          setIsLoadingMore(false);
+        }
       }
     },
     [debouncedKeyword, categories, isSoldOutIncluded, sort, normalizeSale],
