@@ -1,6 +1,7 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
+import { LOCAL_UPLOAD_DIR, LOCAL_UPLOAD_ROUTE, isLocalStorage } from "./lib/image-storage.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { cardRouter } from "./routes/card.routes.js";
@@ -28,6 +29,22 @@ const allowedOrigin =
 app.use(cors({ origin: allowedOrigin, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+
+// Supabase 설정이 없을 때만: apps/api/uploads/ 에 저장된 업로드 이미지를 /uploads 로 공개한다 (lib/image-storage.js)
+if (isLocalStorage) {
+  app.use(
+    LOCAL_UPLOAD_ROUTE,
+    express.static(LOCAL_UPLOAD_DIR, {
+      index: false,
+      dotfiles: "ignore",
+      setHeaders: (res) => {
+        res.set("X-Content-Type-Options", "nosniff");
+        // 웹(3000)이 다른 출처에서 <img>/next/image로 불러갈 수 있게 한다
+        res.set("Cross-Origin-Resource-Policy", "cross-origin");
+      },
+    }),
+  );
+}
 
 app.use("/api/v1/health", healthRouter);
 app.use("/api/v1/images", imageRouter);
