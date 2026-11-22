@@ -20,6 +20,9 @@ const AuthContext = createContext(null);
 const INITIAL_RETRY_BASE_MS = 1000;
 const INITIAL_RETRY_MAX_MS = 10_000;
 
+// 로그아웃하면 어느 페이지에 있었든 랜딩(/)으로 보낸다
+const LOGOUT_REDIRECT_PATH = "/";
+
 // 실시간 연결(SSE)을 서버가 거절했을 때 재발급·재연결을 시도하기까지 기다리는 시간
 const USER_EVENTS_RECONNECT_MS = 3000;
 
@@ -30,8 +33,9 @@ export function AuthProvider({ children }) {
   const initialAuthPromiseRef = useRef(null);
   const isLoggingOutRef = useRef(false);
 
+  // 로그아웃 후 도착 페이지(LOGOUT_REDIRECT_PATH)에 오면 로그아웃 진행 표시를 해제한다
   useEffect(() => {
-    if (pathname === "/market") isLoggingOutRef.current = false;
+    if (pathname === LOGOUT_REDIRECT_PATH) isLoggingOutRef.current = false;
   }, [pathname]);
 
   // 최신 currentUser를 콜백 안에서 읽기 위한 ref (reloadCurrentUser가 실패 시 기존 값을 돌려줄 때 사용)
@@ -154,12 +158,12 @@ export function AuthProvider({ children }) {
   //앱전체 로그아웃 함수
   const logout = useCallback(async () => {
     // 보호 페이지의 비로그인 게이트가 로그아웃 이동을 /login으로 바꾸지 않도록 한다.
-    isLoggingOutRef.current = pathname !== "/market";
+    isLoggingOutRef.current = pathname !== LOGOUT_REDIRECT_PATH;
     try {
       await signout();
     } finally {
       setCurrentUser(null);
-      router.replace("/market");
+      router.replace(LOGOUT_REDIRECT_PATH);
     }
   }, [pathname, router]);
 
