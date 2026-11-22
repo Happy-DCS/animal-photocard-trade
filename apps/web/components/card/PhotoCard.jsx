@@ -119,7 +119,8 @@ export default function PhotoCard({
 
         {/* 이름 — 1줄: [태그 머리말], 2줄: 태그 나머지 + 이름. 태그(1등축 색)와 이름이 구분되도록 태그만 색을 입힌다.
             각 줄은 한 줄로 고정하고, 넘치면 카드에 마우스를 올렸을 때 왼쪽→오른쪽으로 훑어 보여준다 */}
-        <h2 className="font-sans-700 mt-2.5 w-4/5 shrink-0 text-[22px] leading-6.5 text-white">
+        {/* 폭: 콘텐츠 영역의 좌우 여백(px-2.75)을 뺀 나머지를 전부 쓴다 */}
+        <h2 className="font-sans-700 mt-2.5 w-full shrink-0 text-[22px] leading-6.5 text-white">
           {tagHead && <MarqueeText className={tagColor}>{tagHead}</MarqueeText>}
           <MarqueeText>
             {tagRest && <span className={tagColor}>{tagRest} </span>}

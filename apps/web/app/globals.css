@@ -80,20 +80,22 @@ body {
   word-break: keep-all;
 }
 
-/* 포토카드 제목이 한 줄을 넘을 때, 카드(.group)에 마우스를 올리면 끝까지 훑었다가 돌아온다 (components/card/MarqueeText.jsx) */
+/* 포토카드 제목이 한 줄을 넘을 때, 카드(.group)에 마우스를 올리면 처음에서 잠깐 멈춘 뒤 끝까지 훑고,
+   끝에서 잠깐 멈췄다가 처음 위치로 바로 돌아가 반복한다 (components/card/MarqueeText.jsx).
+   구간 비율: 0~15% 처음에서 멈춤 · 15~80% 이동 · 80~100% 끝에서 멈춤 → 다음 반복은 처음부터 */
 @keyframes marquee-pan {
   0%,
   15% {
     transform: translateX(0);
   }
-  85%,
+  80%,
   100% {
     transform: translateX(var(--marquee-distance));
   }
 }
 
 .group:hover .marquee-pan {
-  animation: marquee-pan var(--marquee-duration) linear infinite alternate;
+  animation: marquee-pan var(--marquee-duration) linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

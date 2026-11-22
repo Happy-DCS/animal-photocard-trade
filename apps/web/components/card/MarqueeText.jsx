@@ -2,7 +2,8 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 
-// 한 줄을 넘는 텍스트를 카드(가장 가까운 .group)에 마우스를 올렸을 때 왼쪽→오른쪽으로 훑어 보여준다.
+// 한 줄을 넘는 텍스트를 카드(가장 가까운 .group)에 마우스를 올렸을 때 왼쪽→오른쪽으로 끝까지 훑고,
+// 잠깐 멈춘 뒤 처음 위치로 돌아가 반복한다 (키프레임: app/globals.css의 marquee-pan).
 // 넘치지 않으면 아무 움직임 없이 그대로 표시한다. 이동 속도는 글자 길이와 상관없이 일정하다
 const PAN_SPEED_PX_PER_SEC = 40;
 const MIN_DURATION_SEC = 2;
@@ -31,8 +32,8 @@ export default function MarqueeText({ children, className = "" }) {
   }, [children]);
 
   const isOverflowing = overflow > 0;
-  // 양 끝에서 잠깐 멈추는 시간(키프레임의 0~15%, 85~100%)까지 포함한 한 방향 이동 시간
-  const duration = Math.max(MIN_DURATION_SEC, overflow / PAN_SPEED_PX_PER_SEC / 0.7);
+  // 한 번 반복하는 전체 시간. 실제 이동은 키프레임의 15~80%(65%) 구간이고 나머지는 양 끝에서 멈추는 시간이다
+  const duration = Math.max(MIN_DURATION_SEC, overflow / PAN_SPEED_PX_PER_SEC / 0.65);
 
   return (
     <span
