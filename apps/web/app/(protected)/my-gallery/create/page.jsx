@@ -351,7 +351,7 @@ export default function CreatePage() {
                           aria-pressed={isSelected}
                           aria-label={label}
                           style={url ? { backgroundImage: `url(${url})` } : undefined}
-                          className={`flex aspect-[188/125] flex-1 items-center justify-center overflow-hidden bg-[#535353] bg-cover bg-center ${
+                          className={`flex aspect-400/232 flex-1 items-center justify-center overflow-hidden bg-[#535353] bg-cover bg-center ${
                             isSelected ? "ring-2 ring-purple-button" : ""
                           }`}
                         >
