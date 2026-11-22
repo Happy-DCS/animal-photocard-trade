@@ -1,3 +1,6 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
 import { prisma } from "../src/lib/prisma.js";
 import { deriveCardDescription, deriveCardTag } from "../src/lib/card-flavor.js";
 import { hashPassword } from "../src/lib/password.js";
@@ -1339,7 +1342,9 @@ export async function seed(database = prisma, { passwordHash = null } = {}) {
   }
 }
 
-const isDirectRun = process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href;
+// pathToFileURL을 써야 Windows 경로(C:\...)나 상대 경로로 실행해도 file:// URL로 올바르게 비교된다
+const isDirectRun =
+  process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
 
 // SEED_USER_PASSWORD가 있으면 데모 계정에 그 비밀번호를 심는다 (없으면 데모 계정으로는 로그인 불가)
 if (isDirectRun)
