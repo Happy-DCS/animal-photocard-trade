@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import Cropper from "react-easy-crop";
 import { VARIANTS, useImageVariants } from "./useImageVariants";
 import styles from "./create.module.css";
 import MobileHeader from "@/components/ui/MobileHeader";
@@ -15,6 +16,13 @@ const CATEGORIES = [
   { value: "DOG", label: "강아지", image: "/dog.png" },
   { value: "CAT", label: "고양이", image: "/cat.png" },
 ];
+
+// 카드 이미지 영역 비율 (PhotoCard.jsx 400×232, 서버 저장 규격 800×464와 같음).
+// 미리보기 = 자르기 프레임이라, 여기서 보이는 그대로 카드에 들어간다
+const CARD_ASPECT = 400 / 232;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3;
+const INITIAL_CROP = { x: 0, y: 0 };
 
 // 아이폰 HEIC는 대부분 브라우저(Safari 제외)가 <img>로 표시하지 못해서, 선택 즉시 JPEG로 바꿔둔다.
 // mimetype이 비어있는 경우가 있어 확장자로도 같이 확인한다
@@ -51,6 +59,18 @@ export default function CreatePage() {
   const [uploadErrorMessage, setUploadErrorMessage] = useState("");
 
   const uploadSeqRef = useRef(0);
+
+  // 미리보기에서 원본을 확대·축소·이동해 카드에 보일 영역을 고른다 (react-easy-crop)
+  const [cropPosition, setCropPosition] = useState(INITIAL_CROP);
+  const [zoom, setZoom] = useState(MIN_ZOOM);
+  // 원본 기준 퍼센트 영역 { x, y, width, height }. 생성 시 서버로 보내 원본을 이 영역으로 자른다
+  const [cropArea, setCropArea] = useState(null);
+
+  function resetCrop() {
+    setCropPosition(INITIAL_CROP);
+    setZoom(MIN_ZOOM);
+    setCropArea(null);
+  }
 
   const { variants } = useImageVariants(imageFile);
   const selectedUrl = variants?.[selectedKey]?.url || previewUrl;
@@ -98,6 +118,7 @@ export default function CreatePage() {
         imageId: uploadedImage.id,
         filterType,
         name: name.trim(),
+        crop: cropArea ?? undefined,
       });
 
       // TODO: GET /cards/{id} 가 생기면 success 페이지가 직접 조회하도록 바꾸고 쿼리 전달은 제거
@@ -146,6 +167,7 @@ export default function CreatePage() {
       setImageFile(null);
       setPreviewUrl("");
       setSelectedKey("original");
+      resetCrop();
       setUploadedImage(null);
       setUploadStatus("idle");
       return;
@@ -170,6 +192,7 @@ export default function CreatePage() {
     setImageFile(file);
     setPreviewUrl(URL.createObjectURL(file));
     setSelectedKey("original");
+    resetCrop();
     uploadSelectedImage(file, category);
   }
 
@@ -182,6 +205,7 @@ export default function CreatePage() {
     setImageFile(null);
     setPreviewUrl("");
     setSelectedKey("original");
+    resetCrop();
     setName("");
     setUploadedImage(null);
     setUploadStatus("idle");
@@ -255,18 +279,46 @@ export default function CreatePage() {
                 <div
                   className={`${styles.stepIn} flex h-auto w-full flex-col gap-4 pc:w-188 pc:gap-7.5`}
                 >
-                  <div
-                    role="img"
-                    aria-label={selectedUrl ? "선택한 이미지 미리보기" : undefined}
-                    style={selectedUrl ? { backgroundImage: `url(${selectedUrl})` } : undefined}
-                    className="flex aspect-[188/125] w-full items-center justify-center overflow-hidden bg-[#535353] bg-cover bg-center pc:aspect-auto pc:h-125"
-                  >
-                    {!selectedUrl && (
+                  {/* 카드와 같은 400:232 비율. 이 프레임에 보이는 영역이 그대로 카드 이미지가 된다.
+                      드래그로 이동, 휠·핀치·아래 슬라이더로 확대·축소 */}
+                  <div className="relative flex aspect-400/232 w-full items-center justify-center overflow-hidden bg-[#535353]">
+                    {selectedUrl ? (
+                      <Cropper
+                        image={selectedUrl}
+                        crop={cropPosition}
+                        zoom={zoom}
+                        minZoom={MIN_ZOOM}
+                        maxZoom={MAX_ZOOM}
+                        aspect={CARD_ASPECT}
+                        objectFit="cover"
+                        showGrid={false}
+                        onCropChange={setCropPosition}
+                        onZoomChange={setZoom}
+                        onCropComplete={(croppedArea) => setCropArea(croppedArea)}
+                        mediaProps={{ alt: "선택한 이미지 미리보기" }}
+                        style={{ cropAreaStyle: { border: "none", boxShadow: "none" } }}
+                      />
+                    ) : (
                       <span className="text-base font-light leading-[normal] text-white">
                         이미지 미리보기
                       </span>
                     )}
                   </div>
+                  {selectedUrl && (
+                    <label className="flex items-center gap-3 text-sm text-gray-200">
+                      <span className="shrink-0">확대</span>
+                      <input
+                        type="range"
+                        min={MIN_ZOOM}
+                        max={MAX_ZOOM}
+                        step={0.01}
+                        value={zoom}
+                        onChange={(e) => setZoom(Number(e.target.value))}
+                        className="w-full accent-purple-button"
+                        aria-label="이미지 확대 비율"
+                      />
+                    </label>
+                  )}
                   <div className="flex h-auto w-full gap-2 pc:gap-3.75">
                     {VARIANTS.map(({ key, label }) => {
                       const url = variants?.[key]?.url;
