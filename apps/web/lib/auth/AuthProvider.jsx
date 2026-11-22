@@ -2,7 +2,7 @@
 
 import { ApiError, onSessionExpired } from "@/lib/api-client";
 import { getCurrentUser, signout } from "@/lib/auth/api";
-import { getRealtimeClient } from "@/lib/realtime/client";
+import { connectUserEvents } from "@/lib/realtime/user-events";
 import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
@@ -19,6 +19,9 @@ const AuthContext = createContext(null);
 // 첫 진입 때 /users/me가 네트워크 오류 등으로 실패하면 1초부터 두 배씩, 최대 10초 간격으로 다시 시도한다
 const INITIAL_RETRY_BASE_MS = 1000;
 const INITIAL_RETRY_MAX_MS = 10_000;
+
+// 실시간 연결(SSE)을 서버가 거절했을 때 재발급·재연결을 시도하기까지 기다리는 시간
+const USER_EVENTS_RECONNECT_MS = 3000;
 
 export function AuthProvider({ children }) {
   const router = useRouter();
@@ -105,27 +108,48 @@ export function AuthProvider({ children }) {
     }
   }, [resolveCurrentUser]);
 
-  // 다른 사용자의 행동(구매·교환 제시 등)으로 내 포인트·알림이 바뀌는 경우를 실시간으로 반영한다.
-  // 서버가 /users/me로 내려주는 realtimeChannel(추측 불가능한 채널명)을 구독해서,
-  // "바뀌었다"는 신호만 받으면 현재 사용자 정보를 다시 불러온다 (값 자체는 서버 응답을 신뢰)
+  // 로그인한 사용자 정보의 일부만 바꾼다 (SSE로 받은 값, 알림 드롭다운에서 바뀐 안읽은 개수 등).
+  // patch는 객체 또는 (prev) => 객체 함수. 비로그인 상태면 무시한다
+  const patchCurrentUser = useCallback((patch) => {
+    setCurrentUser((prev) => {
+      if (!prev) return prev;
+      return { ...prev, ...(typeof patch === "function" ? patch(prev) : patch) };
+    });
+  }, []);
+
+  // 다른 사용자의 행동(구매·교환 등)으로 바뀐 내 포인트·안읽은 알림 수를 API의 SSE로 직접 받아 반영한다.
+  // 연결 직후에도 현재 값을 한 번 받으므로, 로그인 응답에 없던 unreadCount도 로그인 직후 바로 채워진다
+  const currentUserId = currentUser?.id;
   useEffect(() => {
-    const channelTopic = currentUser?.realtimeChannel;
-    if (!channelTopic) return;
+    if (!currentUserId) return;
 
-    const supabase = getRealtimeClient();
-    if (!supabase) return;
+    let isActive = true;
+    let disconnect = () => {};
+    let reconnectTimer;
 
-    const channel = supabase
-      .channel(channelTopic)
-      .on("broadcast", { event: "changed" }, () => {
-        reloadCurrentUser();
-      })
-      .subscribe();
+    const connect = () => {
+      disconnect = connectUserEvents({
+        onUser: patchCurrentUser,
+        // 서버가 연결을 거절함(대개 access 토큰 만료) → /users/me 재조회로 재발급을 거친 뒤,
+        // 여전히 로그인 상태면 다시 연결한다 (로그인 만료면 currentUser가 null이 되어 이 effect가 정리된다)
+        onClosed: () => {
+          reconnectTimer = setTimeout(async () => {
+            if (!isActive) return;
+            const user = await reloadCurrentUser();
+            if (isActive && user) connect();
+          }, USER_EVENTS_RECONNECT_MS);
+        },
+      });
+    };
+
+    connect();
 
     return () => {
-      supabase.removeChannel(channel);
+      isActive = false;
+      clearTimeout(reconnectTimer);
+      disconnect();
     };
-  }, [currentUser?.realtimeChannel, reloadCurrentUser]);
+  }, [currentUserId, patchCurrentUser, reloadCurrentUser]);
 
   //앱전체 로그아웃 함수
   const logout = useCallback(async () => {
@@ -148,8 +172,9 @@ export function AuthProvider({ children }) {
       login,
       logout,
       reloadCurrentUser,
+      patchCurrentUser,
     }),
-    [currentUser, login, logout, reloadCurrentUser],
+    [currentUser, login, logout, reloadCurrentUser, patchCurrentUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
