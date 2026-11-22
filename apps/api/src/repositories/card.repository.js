@@ -1,18 +1,23 @@
 import { prisma } from "../lib/prisma.js";
 
+// 카드를 만들면서 이미지 URL을 카드 규격으로 변환한 파일로 바꾼다 (둘 중 하나라도 실패하면 함께 되돌린다)
 export function createCard({
   ownerId,
   createdById,
   imageId,
+  imageUrl,
   name,
   filterType,
   tag,
   topScore,
   description,
 }) {
-  return prisma.card.create({
-    data: { ownerId, createdById, imageId, name, filterType, tag, topScore, description },
-    include: { image: true },
+  return prisma.$transaction(async (tx) => {
+    await tx.imageData.update({ where: { id: imageId }, data: { imageUrl } });
+    return tx.card.create({
+      data: { ownerId, createdById, imageId, name, filterType, tag, topScore, description },
+      include: { image: true },
+    });
   });
 }
 

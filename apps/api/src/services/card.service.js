@@ -6,8 +6,10 @@ import {
   createCard,
   findCardsAndCount,
 } from "../repositories/card.repository.js";
+import { deleteImage } from "../lib/image-storage.js";
 import { findImageById } from "../repositories/image.repository.js";
 import { findUserById } from "../repositories/user.repository.js";
+import { saveCardImage } from "./image.service.js";
 
 const PRISMA_UNIQUE_CONSTRAINT_CODE = "P2002";
 const DAILY_CREATE_LIMIT = 5;
@@ -22,7 +24,15 @@ const ORDER_BY_CLAUSE = {
   oldest: [{ createdAt: "asc" }],
 };
 
-export async function createCardFromImage({ ownerId, imageId, filterType, name }) {
+export async function createCardFromImage({
+  ownerId,
+  imageId,
+  filterType,
+  name,
+  crop,
+  authUid,
+  accessToken,
+}) {
   const usedToday = await countCardsCreatedSince({
     createdById: ownerId,
     since: startOfTodayKst(),
@@ -40,6 +50,13 @@ export async function createCardFromImage({ ownerId, imageId, filterType, name }
   if (!image || image.uploaderId !== ownerId) {
     throw new ApiError(404, "IMAGE_NOT_FOUND", "이미지를 찾을 수 없습니다");
   }
+  // 이미 카드가 된 이미지는 원본이 카드 규격 이미지로 바뀌어 있으므로 다시 자르기 전에 막는다
+  if (image.card) {
+    throw new ApiError(409, "IMAGE_ALREADY_USED", "이미 카드로 만들어진 이미지입니다");
+  }
+
+  // 업로드해 둔 원본을 사용자가 고른 영역으로 잘라 카드 규격(800×464 webp)으로 저장한다
+  const cardImageUrl = await saveCardImage({ image, crop, authUid, accessToken });
 
   const topScore = Math.max(...image.score.axes.map((axis) => axis.value));
   const tag = deriveCardTag(image.category, image.score.axes);
@@ -52,6 +69,7 @@ export async function createCardFromImage({ ownerId, imageId, filterType, name }
       ownerId,
       createdById: ownerId,
       imageId,
+      imageUrl: cardImageUrl,
       name,
       filterType,
       tag,
@@ -59,13 +77,18 @@ export async function createCardFromImage({ ownerId, imageId, filterType, name }
       description,
     });
   } catch (error) {
+    // 카드 생성이 실패하면 방금 만든 카드 규격 이미지는 쓸 곳이 없으므로 지운다
+    await deleteImage(cardImageUrl, accessToken);
     // Card.imageId 는 @unique — 이미 카드로 쓰인 이미지로 또 만들려고 하면 여기서 걸린다
-    // (뒤로가기로 되돌아온 폼 재제출, 중복 탭, 요청 재시도 등으로 발생 가능)
+    // (동시에 같은 이미지로 두 번 요청한 경우 등. 위의 image.card 확인을 통과한 경쟁 상황)
     if (error.code === PRISMA_UNIQUE_CONSTRAINT_CODE) {
       throw new ApiError(409, "IMAGE_ALREADY_USED", "이미 카드로 만들어진 이미지입니다");
     }
     throw error;
   }
+
+  // 원본은 카드 규격 이미지로 대체됐으므로 지운다 (실패해도 카드 생성 결과에는 영향 없음)
+  await deleteImage(image.imageUrl, accessToken);
 
   return toCardResponse(card);
 }

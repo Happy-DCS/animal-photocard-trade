@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,6 +59,65 @@ async function saveToLocal({ objectPath, file }) {
     throw new ApiError(500, "IMAGE_UPLOAD_FAILED", "이미지 업로드에 실패했습니다");
   }
   return toLocalImageUrl(relativePath);
+}
+
+// 저장된 이미지 URL → 로컬 파일 절대 경로. 로컬 저장소 URL이 아니면(또는 uploads 밖을 가리키면) null
+function toLocalFilePath(imageUrl) {
+  if (!isLocalStorage) return null;
+  let pathname;
+  try {
+    pathname = decodeURIComponent(new URL(imageUrl).pathname);
+  } catch {
+    return null;
+  }
+  const prefix = `${LOCAL_UPLOAD_ROUTE}/`;
+  if (!pathname.startsWith(prefix)) return null;
+
+  const absolutePath = path.resolve(LOCAL_UPLOAD_DIR, pathname.slice(prefix.length));
+  return absolutePath.startsWith(LOCAL_UPLOAD_DIR + path.sep) ? absolutePath : null;
+}
+
+// Supabase 공개 URL(.../storage/v1/object/public/<bucket>/<objectPath>) → objectPath
+function toSupabaseObjectPath(imageUrl) {
+  const marker = `/storage/v1/object/public/${STORAGE_BUCKET}/`;
+  const index = imageUrl.indexOf(marker);
+  return index === -1 ? null : decodeURIComponent(imageUrl.slice(index + marker.length));
+}
+
+// 저장된 이미지의 원본 바이트를 읽는다 (카드 생성 때 규격에 맞게 다시 자르기 위해)
+export async function readImage(imageUrl) {
+  try {
+    const localPath = toLocalFilePath(imageUrl);
+    if (localPath) return await readFile(localPath);
+
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error(`이미지 조회 실패: ${response.status}`);
+    return Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    console.error(error);
+    throw new ApiError(500, "IMAGE_PROCESSING_FAILED", "이미지를 불러오지 못했습니다");
+  }
+}
+
+// 더 이상 쓰지 않는 이미지 파일을 지운다. 실패해도 핵심 흐름을 막지 않도록 에러는 기록만 한다.
+// 시드 이미지(seed/)는 여러 환경에서 공유하므로 지우지 않는다
+export async function deleteImage(imageUrl, accessToken) {
+  try {
+    const localPath = toLocalFilePath(imageUrl);
+    if (localPath) {
+      if (!localPath.includes(`${path.sep}seed${path.sep}`)) await rm(localPath, { force: true });
+      return;
+    }
+
+    const objectPath = toSupabaseObjectPath(imageUrl);
+    if (!objectPath || objectPath.startsWith("seed/")) return;
+    const { error } = await createUserScopedClient(accessToken)
+      .storage.from(STORAGE_BUCKET)
+      .remove([objectPath]);
+    if (error) throw error;
+  } catch (error) {
+    console.error("[image-storage] deleteImage 실패", error);
+  }
 }
 
 async function saveToSupabase({ objectPath, file, accessToken }) {
