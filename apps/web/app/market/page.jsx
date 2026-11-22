@@ -12,9 +12,9 @@ import CreateSaleModal from "@/components/trade/CreateSaleModal";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import AppHeader from "@/components/ui/AppHeader";
 
-import { apiFetch } from "@/lib/api-client";
 import { saleToPhotoCardProps } from "@/components/card/toPhotoCardProps";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { getSales } from "@/lib/sales/api";
 
 const PAGE_SIZE = 20;
 
@@ -144,18 +144,13 @@ export default function MarketPage() {
   const fetchCategoryCounts = useCallback(async () => {
     try {
       const fetchCount = async (category, includeSoldOut) => {
-        const params = new URLSearchParams();
-
-        params.set("limit", "1");
-        params.set("category", category);
-        params.set("includeSoldOut", String(includeSoldOut));
-
-        // 검색어가 있다면 검색 결과 기준으로 카운팅
-        if (debouncedKeyword.trim()) {
-          params.set("keyword", debouncedKeyword.trim());
-        }
-
-        const result = await apiFetch(`/sales?${params.toString()}`);
+        const result = await getSales({
+          limit: 1,
+          category,
+          includeSoldOut,
+          // 검색어가 있다면 검색 결과 기준으로 카운팅
+          keyword: debouncedKeyword.trim() || undefined,
+        });
 
         return typeof result?.totalCount === "number" ? result.totalCount : 0;
       };
@@ -206,60 +201,20 @@ export default function MarketPage() {
       }
 
       try {
-        const params = new URLSearchParams();
-
-        params.set("limit", String(PAGE_SIZE));
-
-        // ========================================
-        // 검색어
-        // ========================================
-
-        if (debouncedKeyword.trim()) {
-          params.set("keyword", debouncedKeyword.trim());
-        }
-
-        // ========================================
-        // 카테고리
-        // ========================================
-
-        // API는 category 하나만 받을 수 있음
-        //
-        // []              → 전체
-        // ["DOG"]         → 강아지
-        // ["CAT"]         → 고양이
-        // ["DOG", "CAT"]  → 전체
-        //
-        if (categories.length === 1) {
-          params.set("category", categories[0]);
-        }
-
-        // ========================================
-        // 품절 포함 여부
-        // ========================================
-
-        // false → 품절 제외
-        // true  → 품절 포함
-        params.set("includeSoldOut", String(isSoldOutIncluded));
-
-        // ========================================
-        // 정렬
-        // ========================================
-
-        const orderBy = ORDER_BY_MAP[sort];
-
-        if (orderBy) {
-          params.set("orderBy", orderBy);
-        }
-
-        // ========================================
-        // cursor
-        // ========================================
-
-        if (cursor) {
-          params.set("cursor", cursor);
-        }
-
-        const result = await apiFetch(`/sales?${params.toString()}`);
+        const result = await getSales({
+          limit: PAGE_SIZE,
+          keyword: debouncedKeyword.trim() || undefined,
+          // API는 category 하나만 받을 수 있음
+          // []              → 전체
+          // ["DOG"]         → 강아지
+          // ["CAT"]         → 고양이
+          // ["DOG", "CAT"]  → 전체
+          category: categories.length === 1 ? categories[0] : undefined,
+          // false → 품절 제외 / true → 품절 포함
+          includeSoldOut: isSoldOutIncluded,
+          orderBy: ORDER_BY_MAP[sort],
+          cursor: cursor ?? undefined,
+        });
 
         const lists = result?.lists ?? [];
         const newCursor = result?.nextCursor ?? null;
