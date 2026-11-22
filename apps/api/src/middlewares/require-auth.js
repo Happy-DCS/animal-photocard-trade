@@ -14,7 +14,8 @@ export async function requireAuth(req, res, next) {
 
   const userId = await verifyAccessToken(accessToken);
   const user = userId ? await findUserById(userId) : null;
-  if (!user) {
+  // 탈퇴한 계정(deletedAt)은 세션이 모두 지워지지만, 이미 발급된 access 토큰이 남아 있어도 통과시키지 않는다
+  if (!user || user.deletedAt) {
     throw new ApiError(401, "UNAUTHORIZED", "로그인이 필요합니다");
   }
 

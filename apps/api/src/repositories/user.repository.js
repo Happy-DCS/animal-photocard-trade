@@ -48,3 +48,8 @@ export function grantRandomPointIfAvailable(tx, userId, amount, todayStart, draw
     },
   });
 }
+
+// 마이페이지 정보 수정 (닉네임·비밀번호 해시 등)
+export function updateUser(id, data) {
+  return prisma.user.update({ where: { id }, data });
+}

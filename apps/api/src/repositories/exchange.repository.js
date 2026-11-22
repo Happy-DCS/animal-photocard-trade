@@ -88,7 +88,7 @@ export function findPendingExchangesBySaleId({ saleId, offererId }) {
           tag: true,
           description: true,
           filterType: true,
-          owner: { select: { id: true, nickname: true } },
+          owner: { select: { id: true, nickname: true, deletedAt: true } },
           creator: CARD_CREATOR_SELECT,
           image: { select: { imageUrl: true, category: true, score: true } },
         },
@@ -140,5 +140,13 @@ export function updateExchangeIfPending(tx, exchangeId, status, respondedAt) {
   return tx.exchange.updateMany({
     where: { id: exchangeId, status: "PENDING" },
     data: { status, respondedAt },
+  });
+}
+
+// 회원 탈퇴 시 취소해야 할, 이 유저가 보낸 대기 중 교환 제시 id 목록
+export function findPendingExchangeIdsByOfferer(offererId) {
+  return prisma.exchange.findMany({
+    where: { status: "PENDING", offerCard: { ownerId: offererId } },
+    select: { id: true },
   });
 }

@@ -16,3 +16,8 @@ export function deleteRefreshTokenByHash(tokenHash, db = prisma) {
 export function deleteExpiredRefreshTokens(userId, db = prisma) {
   return db.refreshToken.deleteMany({ where: { userId, expiresAt: { lt: new Date() } } });
 }
+
+// 이 유저의 모든 로그인 세션을 끊는다 (비밀번호 변경·탈퇴 시)
+export function deleteAllRefreshTokens(userId, db = prisma) {
+  return db.refreshToken.deleteMany({ where: { userId } });
+}

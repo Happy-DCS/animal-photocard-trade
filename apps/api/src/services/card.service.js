@@ -1,5 +1,6 @@
 import { ApiError } from "../lib/api-error.js";
 import { deriveCardDescription, deriveCardTag } from "../lib/card-flavor.js";
+import { toPublicUserRef } from "../lib/user-display.js";
 import {
   countCardsByCategory,
   countCardsCreatedSince,
@@ -172,7 +173,7 @@ function toCardResponse(card) {
     ownerId: card.ownerId,
     createdById: card.createdById,
     // 원작자(처음 만든 사람). 소유자(ownerId)는 거래로 바뀌지만 원작자는 바뀌지 않는다
-    creator: { id: card.creator.id, nickname: card.creator.nickname },
+    creator: toPublicUserRef(card.creator),
     imageId: card.imageId,
     name: card.name,
     category: card.image.category,

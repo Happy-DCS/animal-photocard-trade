@@ -52,6 +52,8 @@ model User {
   point        BigInt    @default(0)
   lastDrawAt   DateTime?
   createdAt    DateTime  @default(now())
+  // 탈퇴 시각. 행은 지우지 않고(카드 원작자·거래 기록 유지) 개인정보만 지운 뒤 이 값을 채운다
+  deletedAt    DateTime?
 
   refreshTokens RefreshToken[]
   notifications Notification[]

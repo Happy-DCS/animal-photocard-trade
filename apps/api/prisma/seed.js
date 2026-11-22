@@ -1232,6 +1232,8 @@ export async function seed(database = prisma, { passwordHash = null } = {}) {
         provider: user.provider,
         providerUid: user.providerUid,
         passwordHash,
+        // 탈퇴 테스트 등으로 탈퇴 처리된 데모 계정도 다시 시드하면 정상 계정으로 되돌린다
+        deletedAt: null,
         point: user.point,
         lastDrawAt: user.lastDrawAt,
       },

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { ApiError } from "../lib/api-error.js";
+import { toPublicNickname, toPublicUserRef } from "../lib/user-display.js";
 import { prisma } from "../lib/prisma.js";
 import { notifyUserChanged, notifyUsersChanged } from "./user-event.service.js";
 import * as cardRepository from "../repositories/card.repository.js";
@@ -80,7 +81,7 @@ export async function getSales({
           image: myOffer.offerCard.image.imageUrl,
           filterType: myOffer.offerCard.filterType,
           category: myOffer.offerCard.image.category,
-          creator: toCreator(myOffer.offerCard.creator),
+          creator: toPublicUserRef(myOffer.offerCard.creator),
         }
       : {
           id: sale.card.id,
@@ -90,7 +91,7 @@ export async function getSales({
           image: sale.card.image.imageUrl,
           filterType: sale.card.filterType,
           category: sale.card.image.category,
-          creator: toCreator(sale.card.creator),
+          creator: toPublicUserRef(sale.card.creator),
         };
 
     return {
@@ -100,7 +101,7 @@ export async function getSales({
 
       seller: {
         id: sale.seller.id,
-        nickname: sale.seller.nickname,
+        nickname: toPublicNickname(sale.seller),
       },
 
       description: sale.description,
@@ -354,7 +355,7 @@ function toExchangeResponse(exchange) {
     respondedAt: exchange.respondedAt,
     offerer: {
       id: offerCard.owner.id,
-      nickname: offerCard.owner.nickname,
+      nickname: toPublicNickname(offerCard.owner),
     },
     offerCard: {
       id: offerCard.id,
@@ -365,7 +366,7 @@ function toExchangeResponse(exchange) {
       imageUrl: offerCard.image.imageUrl,
       category: offerCard.image.category,
       score: offerCard.image.score,
-      creator: toCreator(offerCard.creator),
+      creator: toPublicUserRef(offerCard.creator),
     },
   };
 }
@@ -443,9 +444,9 @@ export async function getSaleById(id) {
       image: sale.card.image.imageUrl,
       filterType: sale.card.filterType,
       category: sale.card.image.category,
-      creator: toCreator(sale.card.creator),
+      creator: toPublicUserRef(sale.card.creator),
     },
-    seller: { id: sale.seller.id, nickname: sale.seller.nickname },
+    seller: toPublicUserRef(sale.seller),
     description: sale.description,
     canExchange: sale.canExchange,
     price: Number(sale.price),
@@ -525,9 +526,4 @@ export async function cancelSale(id, seller) {
 
   await notifyUsersChanged(offererIds);
   return result;
-}
-
-// 카드 원작자(처음 만든 사람) 응답 형태. 판매자·소유자와 다를 수 있다
-function toCreator(creator) {
-  return creator ? { id: creator.id, nickname: creator.nickname } : null;
 }

@@ -305,3 +305,8 @@ export function cancelSaleById(tx, id, closedAt) {
     },
   });
 }
+
+// 회원 탈퇴 시 내려야 할, 이 유저가 판매 중인 판매글 id 목록
+export function findOnSaleIdsBySeller(sellerId) {
+  return prisma.sale.findMany({ where: { sellerId, status: "ON_SALE" }, select: { id: true } });
+}

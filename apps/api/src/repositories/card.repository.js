@@ -1,7 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 
 // 카드 응답에 함께 실을 원작자(처음 만든 사람) 정보. 판매·교환 조회에서도 같은 형태로 쓴다
-export const CARD_CREATOR_SELECT = { select: { id: true, nickname: true } };
+export const CARD_CREATOR_SELECT = { select: { id: true, nickname: true, deletedAt: true } };
 const CARD_INCLUDE = { image: true, creator: CARD_CREATOR_SELECT };
 
 // 카드를 만들면서 이미지 URL을 카드 규격으로 변환한 파일로 바꾼다 (둘 중 하나라도 실패하면 함께 되돌린다)

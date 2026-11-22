@@ -12,6 +12,7 @@ import {
 } from "../lib/tokens.js";
 import {
   createRefreshToken,
+  deleteAllRefreshTokens,
   deleteExpiredRefreshTokens,
   deleteRefreshTokenByHash,
   findRefreshTokenByHash,
@@ -65,6 +66,29 @@ export async function signin({ email, password }) {
   }
 
   return { user: toPublicUser(user), session: await issueSession(user.id) };
+}
+
+// 비밀번호 변경 (이메일 가입 계정만). 다른 기기의 로그인은 모두 끊고, 지금 기기용 새 세션을 돌려준다.
+// 현재 비밀번호가 틀리면 401이 아닌 400을 쓴다 — 401은 웹이 "토큰 만료"로 보고 재발급을 시도하기 때문이다
+export async function changePassword({ user, currentPassword, newPassword }) {
+  if (!user.passwordHash) {
+    throw new ApiError(400, "PASSWORD_NOT_SET", "소셜 로그인 계정은 비밀번호를 변경할 수 없습니다");
+  }
+  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+    throw new ApiError(400, "INVALID_PASSWORD", "현재 비밀번호가 올바르지 않습니다");
+  }
+  if (await verifyPassword(newPassword, user.passwordHash)) {
+    throw new ApiError(400, "SAME_PASSWORD", "현재 비밀번호와 다른 비밀번호를 입력해 주세요");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await hashPassword(newPassword) },
+    });
+    await deleteAllRefreshTokens(user.id, tx);
+    return issueSession(user.id, tx);
+  });
 }
 
 // 로그아웃: 이 브라우저의 refresh 토큰만 폐기한다 (다른 기기의 로그인은 유지)
