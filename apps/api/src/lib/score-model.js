@@ -6,6 +6,8 @@ import * as tf from "@tensorflow/tfjs";
 import "@tensorflow/tfjs-backend-wasm";
 import sharp from "sharp";
 
+import { ApiError } from "./api-error.js";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // apps/api/src/lib -> apps/api/models
 const MODELS_DIR = path.join(__dirname, "../../models");
@@ -53,17 +55,31 @@ async function loadModel(category) {
   );
 }
 
+// 손상됐거나 이미지가 아닌 파일은 서버 오류(500)가 아니라 잘못된 요청(400)으로 알린다
+async function toModelPixels(imageBuffer) {
+  try {
+    // Teachable Machine 웹 위젯과 동일하게 중앙 정사각형 크롭 후 리사이즈 (원본 비율 왜곡 방지)
+    return await sharp(imageBuffer)
+      .resize(IMAGE_SIZE, IMAGE_SIZE, { fit: "cover", position: "center" })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+  } catch (error) {
+    console.error(error);
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "이미지를 읽을 수 없습니다. 다른 사진을 선택해 주세요",
+    );
+  }
+}
+
 // 이미지 버퍼 → 확률 배열([0,1], 합계 1에 가까움). 순서는 models/{category}/metadata.json 의 labels 순서
 // (SCORE_AXES 순서와 이미 일치하도록 라벨을 맞춰둠)
 export async function predictProbabilities(category, imageBuffer) {
   const [, model] = await Promise.all([ensureBackend(), getModel(category)]);
 
-  // Teachable Machine 웹 위젯과 동일하게 중앙 정사각형 크롭 후 리사이즈 (원본 비율 왜곡 방지)
-  const { data, info } = await sharp(imageBuffer)
-    .resize(IMAGE_SIZE, IMAGE_SIZE, { fit: "cover", position: "center" })
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  const { data, info } = await toModelPixels(imageBuffer);
 
   const probabilities = tf.tidy(() => {
     const pixels = tf.tensor3d(new Uint8Array(data), [info.height, info.width, info.channels]);

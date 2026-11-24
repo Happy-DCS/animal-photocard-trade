@@ -19,10 +19,9 @@ export const MIME_EXTENSIONS = {
 };
 
 export async function uploadImage({ uploaderId, category, file }) {
-  const [imageUrl, axes] = await Promise.all([
-    uploadToStorage({ uploaderId, file }),
-    generateScoreAxes(category, file.buffer),
-  ]);
+  // 읽을 수 없는 이미지는 여기서 걸러진다. 저장을 먼저(또는 동시에) 하면 쓰이지 않는 파일이 남으므로 순서를 지킨다
+  const axes = await generateScoreAxes(category, file.buffer);
+  const imageUrl = await uploadToStorage({ uploaderId, file });
   const image = await createImage({ uploaderId, imageUrl, category, score: { axes } });
   return toImageResponse(image);
 }
