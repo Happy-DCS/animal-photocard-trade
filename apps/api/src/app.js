@@ -18,6 +18,9 @@ BigInt.prototype.toJSON = function () {
 
 export const app = express();
 
+// 응답 헤더로 서버 기술(Express)을 드러내지 않는다
+app.disable("x-powered-by");
+
 // Render 등 리버스 프록시 뒤에서 실행될 때 X-Forwarded-For/Proto를 신뢰하게 한다.
 // 이게 없으면 express-rate-limit이 X-Forwarded-For 헤더를 보고도 trust proxy가 꺼져있다며
 // ERR_ERL_UNEXPECTED_X_FORWARDED_FOR 에러를 던져 card/image 라우트 요청이 실패한다.
