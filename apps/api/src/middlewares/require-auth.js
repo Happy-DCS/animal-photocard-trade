@@ -20,6 +20,5 @@ export async function requireAuth(req, res, next) {
   }
 
   req.user = user;
-  req.accessToken = accessToken;
   next();
 }

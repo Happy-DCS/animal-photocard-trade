@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 
 import { ApiError } from "../lib/api-error.js";
-import { isLocalStorage, readImage, saveImage } from "../lib/image-storage.js";
+import { readImage, saveImage } from "../lib/image-storage.js";
 import { predictProbabilities } from "../lib/score-model.js";
 import { SCORE_AXES } from "../lib/score-config.js";
 import { createImage } from "../repositories/image.repository.js";
@@ -18,9 +18,9 @@ export const MIME_EXTENSIONS = {
   "image/gif": "gif",
 };
 
-export async function uploadImage({ uploaderId, authUid, accessToken, category, file }) {
+export async function uploadImage({ uploaderId, category, file }) {
   const [imageUrl, axes] = await Promise.all([
-    uploadToStorage({ accessToken, authUid, uploaderId, file }),
+    uploadToStorage({ uploaderId, file }),
     generateScoreAxes(category, file.buffer),
   ]);
   const image = await createImage({ uploaderId, imageUrl, category, score: { axes } });
@@ -28,15 +28,10 @@ export async function uploadImage({ uploaderId, authUid, accessToken, category, 
 }
 
 // 저장 위치(Supabase 버킷 / 로컬 디스크)는 lib/image-storage.js가 .env 설정을 보고 고른다.
-// Supabase를 쓸 때는 경로의 첫 폴더가 Storage RLS 정책의 auth.uid()와 비교된다 (User.providerUid)
-function toStorageFolder({ authUid, uploaderId }) {
-  return isLocalStorage ? uploaderId : authUid;
-}
-
-async function uploadToStorage({ accessToken, authUid, uploaderId, file }) {
-  const folder = toStorageFolder({ authUid, uploaderId });
-  const objectPath = `${folder}/${randomUUID()}.${MIME_EXTENSIONS[file.mimetype]}`;
-  return saveImage({ objectPath, file, accessToken });
+// 경로의 첫 폴더는 업로드한 유저의 id다
+async function uploadToStorage({ uploaderId, file }) {
+  const objectPath = `${uploaderId}/${randomUUID()}.${MIME_EXTENSIONS[file.mimetype]}`;
+  return saveImage({ objectPath, file });
 }
 
 // ── 카드 이미지 규격화 ──
@@ -76,7 +71,7 @@ function clamp(value, minValue, maxValue) {
 
 // 업로드해 둔 원본을 사용자가 고른 영역(crop)으로 잘라 카드 규격(800×464 webp)으로 저장하고 새 URL을 돌려준다.
 // 관상 지수는 업로드 때 원본으로 이미 계산해 두었으므로 여기서는 이미지 모양만 바꾼다
-export async function saveCardImage({ image, crop, authUid, accessToken }) {
+export async function saveCardImage({ image, crop }) {
   const original = await readImage(image.imageUrl);
 
   let buffer;
@@ -91,11 +86,9 @@ export async function saveCardImage({ image, crop, authUid, accessToken }) {
     );
   }
 
-  const folder = toStorageFolder({ authUid, uploaderId: image.uploaderId });
   return saveImage({
-    objectPath: `${folder}/${randomUUID()}.webp`,
+    objectPath: `${image.uploaderId}/${randomUUID()}.webp`,
     file: { buffer, mimetype: "image/webp" },
-    accessToken,
   });
 }
 

@@ -27,8 +27,6 @@ export async function upload(req, res) {
 
   const result = await imageService.uploadImage({
     uploaderId: req.user.id,
-    authUid: req.user.providerUid,
-    accessToken: req.accessToken,
     category: body.category,
     file: req.file,
   });

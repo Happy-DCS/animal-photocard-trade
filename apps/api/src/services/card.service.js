@@ -25,15 +25,7 @@ const ORDER_BY_CLAUSE = {
   oldest: [{ createdAt: "asc" }],
 };
 
-export async function createCardFromImage({
-  ownerId,
-  imageId,
-  filterType,
-  name,
-  crop,
-  authUid,
-  accessToken,
-}) {
+export async function createCardFromImage({ ownerId, imageId, filterType, name, crop }) {
   const usedToday = await countCardsCreatedSince({
     createdById: ownerId,
     since: startOfTodayKst(),
@@ -57,7 +49,7 @@ export async function createCardFromImage({
   }
 
   // 업로드해 둔 원본을 사용자가 고른 영역으로 잘라 카드 규격(800×464 webp)으로 저장한다
-  const cardImageUrl = await saveCardImage({ image, crop, authUid, accessToken });
+  const cardImageUrl = await saveCardImage({ image, crop });
 
   const topScore = Math.max(...image.score.axes.map((axis) => axis.value));
   const tag = deriveCardTag(image.category, image.score.axes);
@@ -79,7 +71,7 @@ export async function createCardFromImage({
     });
   } catch (error) {
     // 카드 생성이 실패하면 방금 만든 카드 규격 이미지는 쓸 곳이 없으므로 지운다
-    await deleteImage(cardImageUrl, accessToken);
+    await deleteImage(cardImageUrl);
     // Card.imageId 는 @unique — 이미 카드로 쓰인 이미지로 또 만들려고 하면 여기서 걸린다
     // (동시에 같은 이미지로 두 번 요청한 경우 등. 위의 image.card 확인을 통과한 경쟁 상황)
     if (error.code === PRISMA_UNIQUE_CONSTRAINT_CODE) {
@@ -89,7 +81,7 @@ export async function createCardFromImage({
   }
 
   // 원본은 카드 규격 이미지로 대체됐으므로 지운다 (실패해도 카드 생성 결과에는 영향 없음)
-  await deleteImage(image.imageUrl, accessToken);
+  await deleteImage(image.imageUrl);
 
   return toCardResponse(card);
 }

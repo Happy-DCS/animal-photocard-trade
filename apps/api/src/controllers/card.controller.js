@@ -61,8 +61,6 @@ export async function create(req, res) {
     filterType: body.filterType,
     name: body.name.trim(),
     crop: body.crop,
-    authUid: req.user.providerUid,
-    accessToken: req.accessToken,
   });
   res.status(201).json({ data: result });
 }

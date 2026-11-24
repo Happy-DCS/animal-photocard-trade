@@ -3,13 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ApiError } from "./api-error.js";
-import { createUserScopedClient } from "./supabase.js";
+import { getStorageClient } from "./supabase.js";
 
 // 업로드 이미지를 어디에 둘지 고른다.
-// - SUPABASE_URL·SUPABASE_ANON_KEY가 실제 값이면 Supabase Storage 버킷
+// - SUPABASE_URL·SUPABASE_SERVICE_ROLE_KEY가 실제 값이면 Supabase Storage 버킷
 // - 비어 있거나 .env.example의 예시 값 그대로면 로컬 디스크(apps/api/uploads/)에 저장하고 API가 /uploads로 직접 서빙
 export const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? "card-images";
-const PLACEHOLDER_PATTERN = /your-project|your_anon_key|^$/;
+const PLACEHOLDER_PATTERN = /your-project|your_secret_key|^$/;
 
 export const LOCAL_UPLOAD_ROUTE = "/uploads";
 export const LOCAL_UPLOAD_DIR = path.resolve(
@@ -22,7 +22,7 @@ function isConfigured(value) {
 }
 
 export const isLocalStorage = !(
-  isConfigured(process.env.SUPABASE_URL) && isConfigured(process.env.SUPABASE_ANON_KEY)
+  isConfigured(process.env.SUPABASE_URL) && isConfigured(process.env.SUPABASE_SERVICE_ROLE_KEY)
 );
 
 // 로컬 파일 URL의 앞부분. 웹에서 이미지를 불러올 API 주소다 (기본: http://localhost:{PORT})
@@ -37,10 +37,8 @@ export function toLocalImageUrl(relativePath) {
 }
 
 // objectPath 예: "<폴더>/<uuid>.png". 저장 후 공개 URL을 돌려준다
-export async function saveImage({ objectPath, file, accessToken }) {
-  return isLocalStorage
-    ? saveToLocal({ objectPath, file })
-    : saveToSupabase({ objectPath, file, accessToken });
+export async function saveImage({ objectPath, file }) {
+  return isLocalStorage ? saveToLocal({ objectPath, file }) : saveToSupabase({ objectPath, file });
 }
 
 async function saveToLocal({ objectPath, file }) {
@@ -101,7 +99,7 @@ export async function readImage(imageUrl) {
 
 // 더 이상 쓰지 않는 이미지 파일을 지운다. 실패해도 핵심 흐름을 막지 않도록 에러는 기록만 한다.
 // 시드 이미지(seed/)는 여러 환경에서 공유하므로 지우지 않는다
-export async function deleteImage(imageUrl, accessToken) {
+export async function deleteImage(imageUrl) {
   try {
     const localPath = toLocalFilePath(imageUrl);
     if (localPath) {
@@ -111,21 +109,20 @@ export async function deleteImage(imageUrl, accessToken) {
 
     const objectPath = toSupabaseObjectPath(imageUrl);
     if (!objectPath || objectPath.startsWith("seed/")) return;
-    const { error } = await createUserScopedClient(accessToken)
-      .storage.from(STORAGE_BUCKET)
-      .remove([objectPath]);
+    const { error } = await getStorageClient().storage.from(STORAGE_BUCKET).remove([objectPath]);
     if (error) throw error;
   } catch (error) {
     console.error("[image-storage] deleteImage 실패", error);
   }
 }
 
-async function saveToSupabase({ objectPath, file, accessToken }) {
-  const supabase = createUserScopedClient(accessToken);
+async function saveToSupabase({ objectPath, file }) {
+  const supabase = getStorageClient();
   const { error } = await supabase.storage
     .from(STORAGE_BUCKET)
     .upload(objectPath, file.buffer, { contentType: file.mimetype });
   if (error) {
+    console.error(error);
     throw new ApiError(500, "IMAGE_UPLOAD_FAILED", "이미지 업로드에 실패했습니다");
   }
 
