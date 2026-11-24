@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import CardPreviewModal from "@/components/card/CardPreviewModal";
+import { PHOTO_CARD_GRID_CLASS } from "@/components/card/cardGrid";
 import ScaledPhotoCard from "@/components/card/ScaledPhotoCard";
 import { cardToPhotoCardProps } from "@/components/card/toPhotoCardProps";
 import { fetchMyCards } from "@/lib/gallery/api";
@@ -25,6 +27,10 @@ export default function MyGalleryCards({ userName }) {
   const [data, setData] = useState({ items: [], totalCount: 0, totalPages: 0, categoryCounts: {} });
   const [status, setStatus] = useState("loading"); // loading | success | error
   const [errorMessage, setErrorMessage] = useState("");
+
+  // 클릭한 카드를 화면 중앙에 크게 띄워 보는 모달 (3D 틸트 효과 확인용). null이면 닫힘
+  const [previewCardProps, setPreviewCardProps] = useState(null);
+  const closePreview = useCallback(() => setPreviewCardProps(null), []);
 
   const categoriesKey = categories.join(",");
   const filterKey = `${debouncedSearch}|${categoriesKey}|${sort}`;
@@ -112,15 +118,24 @@ export default function MyGalleryCards({ userName }) {
 
         {status === "success" && data.items.length > 0 && (
           <>
-            <div className="grid w-full grid-cols-2 justify-items-center gap-3 tablet:gap-5 pc:grid-cols-3">
-              {data.items.map((card) => (
-                <ScaledPhotoCard key={card.id} {...cardToPhotoCardProps(card)} />
-              ))}
+            <div className={PHOTO_CARD_GRID_CLASS}>
+              {data.items.map((card) => {
+                const cardProps = cardToPhotoCardProps(card);
+                return (
+                  <ScaledPhotoCard
+                    key={card.id}
+                    {...cardProps}
+                    onClick={() => setPreviewCardProps(cardProps)}
+                  />
+                );
+              })}
             </div>
             <Pagination page={page} totalPages={data.totalPages} onChange={setPage} />
           </>
         )}
       </div>
+
+      <CardPreviewModal cardProps={previewCardProps} onClose={closePreview} allowDownload />
     </>
   );
 }

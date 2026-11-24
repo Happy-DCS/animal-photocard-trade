@@ -5,7 +5,6 @@ import * as imageController from "../controllers/image.controller.js";
 import { ApiError } from "../lib/api-error.js";
 import { MIME_EXTENSIONS } from "../services/image.service.js";
 import { apiRateLimit } from "../middlewares/rate-limit.js";
-import { requireCsrfToken } from "../middlewares/csrf.js";
 import { requireAuth } from "../middlewares/require-auth.js";
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
@@ -36,7 +35,6 @@ imageRouter.post(
   "/upload",
   apiRateLimit,
   requireAuth,
-  requireCsrfToken,
   upload.single("image"),
   imageController.upload,
 );

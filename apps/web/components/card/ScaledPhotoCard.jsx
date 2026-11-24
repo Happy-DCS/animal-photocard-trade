@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 
 import PhotoCard from "./PhotoCard";
 
-const CARD_WIDTH = 400; // PhotoCard 원본 폭(w-100). aspect-*/* 클래스와 짝이 맞아야 한다
+const CARD_WIDTH = 400; // PhotoCard 원본 폭(w-100). 높이(h-146.5 = 586)와 함께 아래 aspect-400/586과 짝이 맞아야 한다
 
 /**
  * PhotoCard(400px 고정 폭)를 그리드 한 칸의 실제 폭에 맞춰 유동적으로 축소/확대한다.
@@ -29,12 +29,7 @@ export default function ScaledPhotoCard(props) {
   }, []);
 
   return (
-    <div
-      ref={wrapperRef}
-      className={`w-full overflow-hidden ${
-        props.variant === "owned" ? "aspect-400/586" : "aspect-400/550"
-      }`}
-    >
+    <div ref={wrapperRef} className="aspect-400/586 w-full overflow-hidden">
       <div className="origin-top-left" style={{ transform: `scale(${scale})` }}>
         <PhotoCard {...props} />
       </div>

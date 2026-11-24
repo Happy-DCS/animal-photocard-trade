@@ -1,6 +1,8 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
+import { LOCAL_UPLOAD_DIR, LOCAL_UPLOAD_ROUTE, isLocalStorage } from "./lib/image-storage.js";
+import { csrfProtection } from "./middlewares/csrf.js";
 import { errorHandler, notFoundHandler } from "./middlewares/error-handler.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { cardRouter } from "./routes/card.routes.js";
@@ -16,6 +18,9 @@ BigInt.prototype.toJSON = function () {
 
 export const app = express();
 
+// 응답 헤더로 서버 기술(Express)을 드러내지 않는다
+app.disable("x-powered-by");
+
 // Render 등 리버스 프록시 뒤에서 실행될 때 X-Forwarded-For/Proto를 신뢰하게 한다.
 // 이게 없으면 express-rate-limit이 X-Forwarded-For 헤더를 보고도 trust proxy가 꺼져있다며
 // ERR_ERL_UNEXPECTED_X_FORWARDED_FOR 에러를 던져 card/image 라우트 요청이 실패한다.
@@ -28,6 +33,28 @@ const allowedOrigin =
 app.use(cors({ origin: allowedOrigin, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+
+// Supabase 설정이 없을 때만: apps/api/uploads/ 에 저장된 업로드 이미지를 /uploads 로 공개한다 (lib/image-storage.js)
+if (isLocalStorage) {
+  app.use(
+    LOCAL_UPLOAD_ROUTE,
+    express.static(LOCAL_UPLOAD_DIR, {
+      index: false,
+      dotfiles: "ignore",
+      setHeaders: (res) => {
+        res.set("X-Content-Type-Options", "nosniff");
+        // 웹(3000)이 다른 출처에서 <img>/next/image로 불러갈 수 있게 한다
+        res.set("Cross-Origin-Resource-Policy", "cross-origin");
+        // 카드 이미지 다운로드(html-to-image)·도트 필터(canvas)는 이미지를 fetch/픽셀로 읽어야 해서 CORS 허용이 필요하다.
+        // 누구나 볼 수 있는 공개 이미지이고 쿠키도 쓰지 않으므로 모든 출처(*)를 허용한다 (Supabase 공개 버킷과 같은 정책)
+        res.set("Access-Control-Allow-Origin", "*");
+      },
+    }),
+  );
+}
+
+// GET이 아닌 API 요청은 로그인·가입을 빼고 모두 CSRF 헤더를 확인한다 (middlewares/csrf.js)
+app.use("/api/v1", csrfProtection);
 
 app.use("/api/v1/health", healthRouter);
 app.use("/api/v1/images", imageRouter);

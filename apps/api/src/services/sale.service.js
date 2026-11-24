@@ -1,8 +1,9 @@
 import { Prisma } from "@prisma/client";
 
 import { ApiError } from "../lib/api-error.js";
+import { toPublicNickname, toPublicUserRef } from "../lib/user-display.js";
 import { prisma } from "../lib/prisma.js";
-import { broadcastUserChanged } from "../lib/realtime.js";
+import { notifyUserChanged, notifyUsersChanged } from "./user-event.service.js";
 import * as cardRepository from "../repositories/card.repository.js";
 import * as exchangeRepository from "../repositories/exchange.repository.js";
 import * as notificationRepository from "../repositories/notification.repository.js";
@@ -21,8 +22,12 @@ export async function getSales({
   cursor,
   page,
   limit = 20,
+  includeCounts = false,
 }) {
-  const [sales, totalCount] = await Promise.all([
+  // 카테고리별 개수는 첫 페이지에서만 집계한다 (커서로 다음 페이지를 받을 때는 생략)
+  const shouldCount = includeCounts && !cursor && page === undefined;
+
+  const [sales, totalCount, categoryCounts] = await Promise.all([
     saleRepository.findSales({
       category,
       keyword,
@@ -44,6 +49,8 @@ export async function getSales({
       sellerId,
       offererId,
     }),
+
+    shouldCount ? getCategoryCounts({ keyword, status, sellerId, offererId }) : undefined,
   ]);
 
   // cursor 방식에서만 한 개 더 조회한 결과로 다음 페이지 존재 여부를 확인
@@ -74,6 +81,7 @@ export async function getSales({
           image: myOffer.offerCard.image.imageUrl,
           filterType: myOffer.offerCard.filterType,
           category: myOffer.offerCard.image.category,
+          creator: toPublicUserRef(myOffer.offerCard.creator),
         }
       : {
           id: sale.card.id,
@@ -83,6 +91,7 @@ export async function getSales({
           image: sale.card.image.imageUrl,
           filterType: sale.card.filterType,
           category: sale.card.image.category,
+          creator: toPublicUserRef(sale.card.creator),
         };
 
     return {
@@ -92,7 +101,7 @@ export async function getSales({
 
       seller: {
         id: sale.seller.id,
-        nickname: sale.seller.nickname,
+        nickname: toPublicNickname(sale.seller),
       },
 
       description: sale.description,
@@ -119,7 +128,36 @@ export async function getSales({
     ...(page !== undefined && {
       totalPages: Math.ceil(totalCount / limit),
     }),
+
+    ...(categoryCounts && { categoryCounts }),
   };
+}
+
+// 모바일 필터에 표시할 카테고리 × 품절 포함 여부별 판매글 개수.
+// 현재 선택된 카테고리·품절 필터와 무관하게 모든 칸을 채워야 하므로 두 조건은 빼고 집계한다
+// 응답 형식: { excludeSoldOut: { DOG, CAT }, includeSoldOut: { DOG, CAT } }
+async function getCategoryCounts({ keyword, status, sellerId, offererId }) {
+  const CATEGORIES = ["DOG", "CAT"];
+  const SOLD_OUT_OPTIONS = [
+    ["excludeSoldOut", "false"],
+    ["includeSoldOut", "true"],
+  ];
+
+  const combinations = SOLD_OUT_OPTIONS.flatMap(([key, includeSoldOut]) =>
+    CATEGORIES.map((category) => ({ key, category, includeSoldOut })),
+  );
+
+  const counts = await Promise.all(
+    combinations.map(({ category, includeSoldOut }) =>
+      saleRepository.countSales({ category, keyword, includeSoldOut, status, sellerId, offererId }),
+    ),
+  );
+
+  const result = { excludeSoldOut: {}, includeSoldOut: {} };
+  combinations.forEach(({ key, category }, index) => {
+    result[key][category] = counts[index];
+  });
+  return result;
 }
 
 /**
@@ -225,7 +263,7 @@ export async function purchaseCard({ saleId, buyer }) {
     };
   });
 
-  await Promise.all(notifyUserIds.map(broadcastUserChanged));
+  await notifyUsersChanged(notifyUserIds);
   return result;
 }
 
@@ -301,7 +339,7 @@ export async function createExchange({ saleId, offerCardId, message, offerer }) 
     };
   });
 
-  await broadcastUserChanged(sellerId);
+  await notifyUserChanged(sellerId);
   return result;
 }
 
@@ -317,7 +355,7 @@ function toExchangeResponse(exchange) {
     respondedAt: exchange.respondedAt,
     offerer: {
       id: offerCard.owner.id,
-      nickname: offerCard.owner.nickname,
+      nickname: toPublicNickname(offerCard.owner),
     },
     offerCard: {
       id: offerCard.id,
@@ -328,6 +366,7 @@ function toExchangeResponse(exchange) {
       imageUrl: offerCard.image.imageUrl,
       category: offerCard.image.category,
       score: offerCard.image.score,
+      creator: toPublicUserRef(offerCard.creator),
     },
   };
 }
@@ -405,8 +444,9 @@ export async function getSaleById(id) {
       image: sale.card.image.imageUrl,
       filterType: sale.card.filterType,
       category: sale.card.image.category,
+      creator: toPublicUserRef(sale.card.creator),
     },
-    seller: { id: sale.seller.id, nickname: sale.seller.nickname },
+    seller: toPublicUserRef(sale.seller),
     description: sale.description,
     canExchange: sale.canExchange,
     price: Number(sale.price),
@@ -484,6 +524,6 @@ export async function cancelSale(id, seller) {
     };
   });
 
-  await Promise.all(offererIds.map(broadcastUserChanged));
+  await notifyUsersChanged(offererIds);
   return result;
 }

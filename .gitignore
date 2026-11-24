@@ -11,3 +11,7 @@ CLAUDE.md
 Claude outputs/
 apps/api/scripts/
 docs/
+
+# 로컬 이미지 저장소 (Supabase 미설정 시 업로드 파일이 쌓임)
+apps/api/uploads/*
+!apps/api/uploads/.gitkeep

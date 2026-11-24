@@ -1,16 +1,15 @@
-import { optional, refine, size, string, type, validate } from "superstruct";
+import { refine, size, string, type, validate } from "superstruct";
 
 import { ApiError } from "../lib/api-error.js";
 import {
-  ACCESS_TOKEN_COOKIE,
   CSRF_TOKEN_COOKIE,
-  OAUTH_VERIFIER_COOKIE,
   REFRESH_TOKEN_COOKIE,
   clearAuthCookies,
-  clearOAuthVerifierCookie,
+  clearOAuthStateCookie,
+  readOAuthStateCookie,
   setAuthCookies,
   setCsrfCookie,
-  setOAuthVerifierCookie,
+  setOAuthStateCookie,
 } from "../lib/auth-cookies.js";
 import * as authService from "../services/auth.service.js";
 
@@ -37,18 +36,11 @@ const SigninBody = type({
   password: NonEmpty,
 });
 
-// POST /auth/social/callback
-const SocialCallbackBody = type({
-  supabaseAccessToken: NonEmpty,
-  supabaseRefreshToken: optional(string()),
-});
-
 const VALIDATION_MESSAGES = {
   email: "이메일 형식이 올바르지 않습니다",
   nickname: "닉네임을 입력해 주세요",
   password: "비밀번호는 8자 이상이어야 합니다",
   passwordConfirm: "비밀번호 확인이 일치하지 않습니다",
-  supabaseAccessToken: "supabaseAccessToken이 필요합니다",
 };
 
 function validateBody(body, Struct) {
@@ -73,6 +65,7 @@ export async function signup(req, res) {
   res.status(201).json({ data: { user } });
 }
 
+// 토큰은 httpOnly 쿠키로만 내려준다 (응답 본문에 실으면 JS가 읽을 수 있어 httpOnly의 의미가 없어진다)
 export async function signin(req, res) {
   const body = validateBody(req.body, SigninBody);
   const { user, session } = await authService.signin({
@@ -82,65 +75,55 @@ export async function signin(req, res) {
 
   setAuthCookies(res, session);
   setCsrfCookie(res);
-  res.json({
-    data: { user, accessToken: session.accessToken, refreshToken: session.refreshToken },
-  });
+  res.json({ data: { user } });
 }
 
 export async function signout(req, res) {
-  // Authorization: Bearer <accessToken> 이 없으면 쿠키의 토큰을 쓴다
-  const bearer = req.get("Authorization")?.replace(/^Bearer\s+/i, "");
-  await authService.signout(bearer || req.cookies[ACCESS_TOKEN_COOKIE]);
+  await authService.signout(req.cookies[REFRESH_TOKEN_COOKIE]);
 
   clearAuthCookies(res);
   res.status(204).end();
 }
 
 export async function refreshToken(req, res) {
-  const session = await authService.refresh(req.cookies[REFRESH_TOKEN_COOKIE]);
-
-  setAuthCookies(res, session);
-  res.json({ data: { accessToken: session.accessToken } });
+  try {
+    const session = await authService.refresh(req.cookies[REFRESH_TOKEN_COOKIE]);
+    setAuthCookies(res, session);
+    res.status(204).end();
+  } catch (error) {
+    // 쓸 수 없는 refresh 토큰이면 쿠키도 지워서 다음 요청이 같은 실패를 반복하지 않게 한다
+    if (error instanceof ApiError) clearAuthCookies(res);
+    throw error;
+  }
 }
 
-// GET /auth/social/:provider
-export async function socialStart(req, res) {
-  const callbackUrl = `${req.protocol}://${req.get("host")}${req.baseUrl}/social/callback`;
-  const { url, codeVerifier } = await authService.startSocialLogin(
-    req.params.provider,
-    callbackUrl,
-  );
+// GET /auth/social/:provider — provider 로그인 페이지로 보낸다
+export function socialStart(req, res) {
+  const { url, state, codeVerifier } = authService.startSocialLogin(req.params.provider);
 
-  setOAuthVerifierCookie(res, codeVerifier);
+  setOAuthStateCookie(res, { state, codeVerifier });
   res.redirect(url);
 }
 
-// GET /auth/social/callback
+// GET /auth/social/:provider/callback — provider가 code·state를 붙여 돌려보내는 곳
 export async function socialFinish(req, res) {
-  const codeVerifier = req.cookies[OAUTH_VERIFIER_COOKIE];
-  clearOAuthVerifierCookie(res);
+  const savedState = readOAuthStateCookie(req);
+  clearOAuthStateCookie(res);
 
   try {
-    const { session } = await authService.finishSocialLogin({ code: req.query.code, codeVerifier });
+    const { session } = await authService.finishSocialLogin(req.params.provider, {
+      code: typeof req.query.code === "string" ? req.query.code : null,
+      state: typeof req.query.state === "string" ? req.query.state : null,
+      savedState,
+    });
     setAuthCookies(res, session);
     setCsrfCookie(res);
     res.redirect(`${WEB_URL}/`);
   } catch (error) {
+    if (!(error instanceof ApiError)) console.error(error);
     const code = error instanceof ApiError ? error.code : "INTERNAL_ERROR";
     res.redirect(`${WEB_URL}/login?error=${code}`);
   }
-}
-
-// POST /auth/social/callback
-export async function socialCallback(req, res) {
-  const body = validateBody(req.body, SocialCallbackBody);
-  const { user, session } = await authService.socialCallback(body);
-
-  setAuthCookies(res, session);
-  setCsrfCookie(res);
-  res.json({
-    data: { user, accessToken: session.accessToken, refreshToken: session.refreshToken },
-  });
 }
 
 // GET /auth/csrf-token — 로그아웃·토큰 재발급 때 X-CSRF-TOKEN 헤더에 넣을 값.

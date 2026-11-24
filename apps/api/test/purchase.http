@@ -67,6 +67,10 @@ Content-Type: application/json
   "password": "password123"
 }
 
+### CSRF 토큰 조회 — 로그인 후 한 번 실행하면 아래 POST들의 X-CSRF-TOKEN 헤더에 자동으로 채워진다 (GET이 아닌 요청은 모두 필요)
+# @name csrf
+GET {{baseUrl}}/auth/csrf-token
+
 ### ─────────────────────────── 본 테스트 ───────────────────────────
 # 아래 @saleId는 위 "준비" 과정을 거쳐 실제로 만든 판매글의 UUID로 교체해서 쓴다.
 # ⚠️ 4번(자기 판매글)은 실패해야 정상이라 판매글 상태를 안 바꾸지만, 1번(정상 구매)은
@@ -77,18 +81,22 @@ Content-Type: application/json
 ### 4. 자기 판매글 구매 → 403 { "code": "SELF_PURCHASE_NOT_ALLOWED" } DONE
 #    ▶ 먼저 위 sellerSignin을 보내서 판매자로 로그인한 다음 이 요청을 보낼 것
 POST {{baseUrl}}/sales/{{saleId}}/purchase
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 ### 1. 정상 구매 → 200 { data: { saleId, status, closedAt } } DONE
 #    ▶ 위 buyerSignin을 다시 보내서 구매자로 돌아온 다음 이 요청을 보낼 것
 POST {{baseUrl}}/sales/{{saleId}}/purchase
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 ### 2. 없는 saleId → 404 { "code": "SALE_NOT_FOUND" } DONE
 #    형식만 맞는 UUID면 되므로 로그인만 돼 있으면 바로 테스트 가능 (누구로 로그인해도 무방)
 POST {{baseUrl}}/sales/{{noSuchSaleId}}/purchase
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 ### 3. 이미 팔린 판매글(SOLD_OUT) → 409 { "code": "SALE_NOT_ON_SALE" } DONE
 #    바로 위 1번에서 이미 SOLD_OUT으로 닫혔으니, 로그인 상태 그대로 같은 saleId로 다시 요청
 POST {{baseUrl}}/sales/{{saleId}}/purchase
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 ### 5. 포인트 부족 → 409 { "code": "INSUFFICIENT_POINT" } DONE
 #    ⚠️ 위 saleId는 1·3번에서 이미 SOLD_OUT이라 재사용하면 SALE_NOT_ON_SALE만 또 뜬다.
@@ -103,10 +111,12 @@ POST {{baseUrl}}/sales/{{saleId}}/purchase
 #      4) @saleId2에 2)에서 새로 만든 saleId를 채우고 아래 요청을 보낸다
 @saleId2 = f3929d35-9cfc-419a-bcd8-0a09745e6a71
 POST {{baseUrl}}/sales/{{saleId2}}/purchase
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 ### 6. 토큰 없음 → 401 { "code": "UNAUTHORIZED" } DONE
 #    쿠키를 안 실어 보내려면 REST Client 새 세션(로그인 이력 없는 상태)에서 실행
 POST {{baseUrl}}/sales/{{saleId}}/purchase
+X-CSRF-TOKEN: {{csrf.response.body.data.csrfToken}}
 
 
 ### ─────────────────────────── 동시성 실험 (터미널에서 직접) ───────────────────────────

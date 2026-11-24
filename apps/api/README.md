@@ -1,6 +1,6 @@
 # api
 
-백엔드 API 서버 (포트 4000). DB는 Postgres + Prisma, 인증은 Supabase Auth. Node 22.9 이상 필요
+백엔드 API 서버 (포트 4000). DB는 Postgres(Supabase 호스팅) + Prisma, 인증은 API가 직접 처리(JWT access + DB refresh, Google OAuth). Node 22.9 이상 필요
 
 ## 구조
 
@@ -28,21 +28,13 @@ src/
 `POST /images/upload`는 Supabase Storage에 파일을 올린다. 코드만으로는 버킷이 안 생기므로, Supabase 대시보드에서 한 번만 설정한다 (지금 공용 개발 DB엔 이미 되어 있음 — 새 프로젝트로 옮길 때만 다시 필요).
 
 1. Storage → New bucket → 이름 `card-images` (`.env`의 `SUPABASE_STORAGE_BUCKET`과 동일하게), **Public bucket** 체크
-2. 버킷의 Policies에서 INSERT 정책 추가 — 로그인한 사용자가 자기 uid 폴더에만 올리도록 제한:
-   ```sql
-   create policy "card-images authenticated insert own folder"
-   on storage.objects for insert
-   to authenticated
-   with check (
-     bucket_id = 'card-images'
-     and auth.uid()::text = (storage.foldername(name))[1]
-   );
-   ```
-   업로드 경로의 첫 폴더명은 `User.id`(우리 앱 PK)가 아니라 **`User.providerUid`(Supabase Auth uid)**를 쓴다 — `auth.uid()`가 비교하는 값이 Supabase Auth uid라서, 앱 PK를 쓰면 정책이 절대 통과하지 못한다 (`image.service.js`의 `authUid` 참고).
+2. Settings → API Keys의 Secret key(`sb_secret_...`)를 `.env`의 `SUPABASE_SERVICE_ROLE_KEY`에 넣는다. RLS를 우회하는 서버 전용 키라 웹(`NEXT_PUBLIC_*`)에는 절대 넣지 않는다
+
+업로드는 API가 이 키로 하므로 Storage 정책(Policies)은 필요 없다. 업로드 경로의 첫 폴더명은 `User.id`다.
 
 ## 테스트
 
 - `test/health.http`: 서버 상태, 404
-- `test/auth.http`: 회원가입(201·409·400), 로그인(200·401·400), 토큰 재발급·로그아웃(CSRF 헤더 필요, 403), 소셜 콜백(401) 케이스
+- `test/auth.http`: 회원가입(201·409·400), 로그인(200·401·400), 토큰 재발급·로그아웃(CSRF 헤더 필요, 403), 소셜 로그인 시작(302·400) 케이스
 - `test/images.http`: 이미지 업로드 (인증·CSRF 필요, 201·400·401·403)
 - `test/cards.http`: 카드 생성 (인증·CSRF 필요, 201·400·401·403·404·409)

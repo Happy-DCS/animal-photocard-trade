@@ -1,18 +1,34 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { randomInt } from "node:crypto";
 
 import { ApiError } from "../lib/api-error.js";
-import { OAUTH_VERIFIER_KEY, createAuthClient, createOAuthClient } from "../lib/supabase.js";
+import { createGoogleAuthRequest, fetchGoogleProfile } from "../lib/google-oauth.js";
+import { prisma } from "../lib/prisma.js";
+import { hashPassword, verifyAgainstDummy, verifyPassword } from "../lib/password.js";
+import {
+  REFRESH_TOKEN_EXPIRES_IN,
+  generateRefreshToken,
+  hashToken,
+  signAccessToken,
+} from "../lib/tokens.js";
+import {
+  createRefreshToken,
+  deleteAllRefreshTokens,
+  deleteExpiredRefreshTokens,
+  deleteRefreshTokenByHash,
+  findRefreshTokenByHash,
+} from "../repositories/refresh-token.repository.js";
 import {
   createUser,
-  deleteUser,
   findUserByEmail,
   findUserByNickname,
-  findUserByProviderUid,
-  updateProviderUid,
+  findUserByProvider,
 } from "../repositories/user.repository.js";
 
-const ACCESS_TOKEN_EXPIRES_IN = 60 * 60;
+const LOCAL_PROVIDER = "local";
 const SOCIAL_PROVIDERS = ["google"];
+
+const invalidCredentials = () =>
+  new ApiError(401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다");
 
 export async function signup({ email, nickname, password }) {
   if (await findUserByEmail(email)) {
@@ -22,104 +38,105 @@ export async function signup({ email, nickname, password }) {
     throw new ApiError(409, "NICKNAME_ALREADY_EXISTS", "이미 사용 중인 닉네임입니다");
   }
 
-  // DB 행을 먼저 만들어 이메일·닉네임을 선점한다(unique 제약이 동시 요청도 막아 준다).
-  // Supabase 계정은 그 다음에 만들고, 실패하면 DB 행을 지워 되돌린다. 그래서 service_role 키가 필요 없다
-  const user = await createUser({
-    email,
-    nickname,
-    provider: "local",
-    providerUid: `pending-${randomUUID()}`,
-  });
-
-  const supabase = createAuthClient();
-  const { data, error } = await supabase.auth.signUp({ email, password });
-  if (error) {
-    await deleteUser(user.id);
-    if (error.code === "user_already_exists") {
-      throw new ApiError(409, "EMAIL_ALREADY_EXISTS", "이미 가입된 이메일입니다");
-    }
-    // Supabase가 거절한 입력값 (예: example.com과 같은 예약 도메인, 너무 약한 비밀번호)
-    if (error.status < 500) {
-      throw new ApiError(400, "VALIDATION_ERROR", error.message);
-    }
-    throw error;
+  let user;
+  try {
+    user = await createUser({
+      email,
+      nickname,
+      provider: LOCAL_PROVIDER,
+      passwordHash: await hashPassword(password),
+    });
+  } catch (error) {
+    // 위 조회와 생성 사이에 같은 값으로 동시 가입한 경우 unique 제약이 막아 준다
+    throw toDuplicateError(error) ?? error;
   }
 
-  // 이메일 인증 없이 가입만 완료시키므로, 가입 시 발급된 토큰은 admin.signOut으로 바로 무효화한다 (명세).
-  // 사용자 토큰을 Bearer로 보내는 호출이라 service_role 키 없이 공개 키로 동작한다
-  if (data.session) {
-    await supabase.auth.admin.signOut(data.session.access_token);
-  }
-
-  await updateProviderUid(user.id, data.user.id);
   return { id: user.id, nickname: user.nickname, createdAt: user.createdAt };
 }
 
-// 로그인: Supabase가 비밀번호를 확인하고 토큰을 발급한다.
 export async function signin({ email, password }) {
-  const supabase = createAuthClient();
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
-    throw new ApiError(401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다");
+  const user = await findUserByEmail(email);
+  if (!user?.passwordHash) {
+    // 없는 이메일·소셜 전용 계정도 같은 시간을 쓰고 같은 에러를 내서 가입 여부를 숨긴다
+    await verifyAgainstDummy(password);
+    throw invalidCredentials();
+  }
+  if (!(await verifyPassword(password, user.passwordHash))) {
+    throw invalidCredentials();
   }
 
-  const user = await findUserByProviderUid(data.user.id);
-  if (!user) {
-    throw new ApiError(401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다");
+  return { user: toPublicUser(user), session: await issueSession(user.id) };
+}
+
+// 비밀번호 변경 (이메일 가입 계정만). 다른 기기의 로그인은 모두 끊고, 지금 기기용 새 세션을 돌려준다.
+// 현재 비밀번호가 틀리면 401이 아닌 400을 쓴다 — 401은 웹이 "토큰 만료"로 보고 재발급을 시도하기 때문이다
+export async function changePassword({ user, currentPassword, newPassword }) {
+  if (!user.passwordHash) {
+    throw new ApiError(400, "PASSWORD_NOT_SET", "소셜 로그인 계정은 비밀번호를 변경할 수 없습니다");
+  }
+  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+    throw new ApiError(400, "INVALID_PASSWORD", "현재 비밀번호가 올바르지 않습니다");
+  }
+  if (await verifyPassword(newPassword, user.passwordHash)) {
+    throw new ApiError(400, "SAME_PASSWORD", "현재 비밀번호와 다른 비밀번호를 입력해 주세요");
   }
 
-  return { user: toPublicUser(user), session: toSession(data.session) };
+  return prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await hashPassword(newPassword) },
+    });
+    await deleteAllRefreshTokens(user.id, tx);
+    return issueSession(user.id, tx);
+  });
 }
 
-// 로그아웃: Supabase 세션을 무효화한다.
-export async function signout(accessToken) {
-  if (!accessToken) return;
-  const supabase = createAuthClient();
-  await supabase.auth.admin.signOut(accessToken).catch(() => {});
+// 로그아웃: 이 브라우저의 refresh 토큰만 폐기한다 (다른 기기의 로그인은 유지)
+export async function signout(refreshToken) {
+  if (!refreshToken) return;
+  await deleteRefreshTokenByHash(hashToken(refreshToken));
 }
 
-// 토큰 재발급: refreshToken으로 새 세션을 받는다 (refreshToken도 함께 새것으로 바뀐다)
+// 토큰 재발급: refresh 토큰을 한 번 쓰면 폐기하고 새것으로 바꾼다 (rotation)
 export async function refresh(refreshToken) {
   if (!refreshToken) {
     throw new ApiError(401, "REFRESH_TOKEN_INVALID", "리프레시 토큰이 없습니다");
   }
 
-  const supabase = createAuthClient();
-  const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-  if (error || !data.session) {
-    const isExpired = error?.message?.toLowerCase().includes("expired");
+  const tokenHash = hashToken(refreshToken);
+  const stored = await findRefreshTokenByHash(tokenHash);
+  if (!stored) {
+    throw new ApiError(401, "REFRESH_TOKEN_INVALID", "리프레시 토큰이 올바르지 않습니다");
+  }
+  if (stored.expiresAt <= new Date()) {
+    await deleteRefreshTokenByHash(tokenHash);
     throw new ApiError(
       401,
-      isExpired ? "REFRESH_TOKEN_EXPIRED" : "REFRESH_TOKEN_INVALID",
-      isExpired
-        ? "로그인이 만료되었습니다. 다시 로그인해 주세요"
-        : "리프레시 토큰이 올바르지 않습니다",
+      "REFRESH_TOKEN_EXPIRED",
+      "로그인이 만료되었습니다. 다시 로그인해 주세요",
     );
   }
 
-  return toSession(data.session);
-}
-
-// 소셜 로그인 1단계: Supabase OAuth 페이지 주소를 만든다. code_verifier는 콜백 때 다시 필요하므로 함께 돌려준다
-export async function startSocialLogin(provider, callbackUrl) {
-  if (!SOCIAL_PROVIDERS.includes(provider)) {
-    throw new ApiError(400, "VALIDATION_ERROR", "지원하지 않는 로그인 방식입니다");
-  }
-
-  const store = new Map();
-  const supabase = createOAuthClient(store);
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider,
-    options: { redirectTo: callbackUrl, skipBrowserRedirect: true },
+  return prisma.$transaction(async (tx) => {
+    // 같은 토큰으로 동시에 재발급을 요청하면 먼저 지운 요청 하나만 새 토큰을 받는다
+    const { count } = await deleteRefreshTokenByHash(tokenHash, tx);
+    if (count === 0) {
+      throw new ApiError(401, "REFRESH_TOKEN_INVALID", "리프레시 토큰이 올바르지 않습니다");
+    }
+    return issueSession(stored.userId, tx);
   });
-  if (error) throw error;
-
-  return { url: data.url, codeVerifier: store.get(OAUTH_VERIFIER_KEY) };
 }
 
-// 소셜 로그인 2단계: Supabase가 돌려준 code를 code_verifier와 함께 세션으로 바꾼 뒤, 명세의 callback 로직을 태운다
-export async function finishSocialLogin({ code, codeVerifier }) {
-  if (!code || !codeVerifier) {
+// 소셜 로그인 1단계: provider 로그인 페이지 주소와, 콜백에서 확인할 state·codeVerifier
+export function startSocialLogin(provider) {
+  assertSocialProvider(provider);
+  return createGoogleAuthRequest();
+}
+
+// 소셜 로그인 2단계: code를 Google 사용자 정보로 바꾸고, 처음이면 가입시킨 뒤 세션을 발급한다
+export async function finishSocialLogin(provider, { code, state, savedState }) {
+  assertSocialProvider(provider);
+  if (!code || !state || !savedState || state !== savedState.state) {
     throw new ApiError(
       401,
       "INVALID_SOCIAL_TOKEN",
@@ -127,56 +144,59 @@ export async function finishSocialLogin({ code, codeVerifier }) {
     );
   }
 
-  const supabase = createOAuthClient(new Map([[OAUTH_VERIFIER_KEY, codeVerifier]]));
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error || !data.session) {
-    throw new ApiError(401, "INVALID_SOCIAL_TOKEN", "소셜 로그인 토큰이 올바르지 않습니다");
-  }
-
-  return socialCallback({
-    supabaseAccessToken: data.session.access_token,
-    supabaseRefreshToken: data.session.refresh_token,
-  });
-}
-
-// 소셜 로그인/회원가입 (명세 POST /auth/social/callback): 토큰을 검증하고, 처음이면 사용자를 만든다
-export async function socialCallback({ supabaseAccessToken, supabaseRefreshToken }) {
-  const supabase = createAuthClient();
-  const { data, error } = await supabase.auth.getUser(supabaseAccessToken);
-  if (error || !data.user) {
-    throw new ApiError(401, "INVALID_SOCIAL_TOKEN", "소셜 로그인 토큰이 올바르지 않습니다");
-  }
-
-  const supabaseUser = data.user;
-  let user = await findUserByProviderUid(supabaseUser.id);
+  const profile = await fetchGoogleProfile({ code, codeVerifier: savedState.codeVerifier });
+  let user = await findUserByProvider(provider, profile.providerUid);
 
   if (!user) {
-    const email = supabaseUser.email?.toLowerCase();
-    if (!email) {
-      throw new ApiError(401, "INVALID_SOCIAL_TOKEN", "이메일 제공에 동의해야 가입할 수 있습니다");
-    }
     // 명세: provider가 달라도 같은 이메일이면 반려 (로그인 수단당 하나의 계정, 계정 연동 미지원)
-    if (await findUserByEmail(email)) {
+    if (await findUserByEmail(profile.email)) {
       throw new ApiError(409, "EMAIL_ALREADY_EXISTS", "다른 방식으로 이미 가입된 이메일입니다");
     }
-
-    const baseNickname = supabaseUser.user_metadata?.name ?? email.split("@")[0];
-    user = await createUser({
-      email,
-      nickname: await makeUniqueNickname(baseNickname),
-      provider: supabaseUser.app_metadata?.provider ?? "social",
-      providerUid: supabaseUser.id,
-    });
+    try {
+      user = await createUser({
+        email: profile.email,
+        nickname: await makeUniqueNickname(profile.name ?? profile.email.split("@")[0]),
+        provider,
+        providerUid: profile.providerUid,
+      });
+    } catch (error) {
+      throw toDuplicateError(error) ?? error;
+    }
   }
 
-  return {
-    user: toPublicUser(user),
-    session: {
-      accessToken: supabaseAccessToken,
-      refreshToken: supabaseRefreshToken ?? null,
-      expiresIn: ACCESS_TOKEN_EXPIRES_IN,
+  return { user: toPublicUser(user), session: await issueSession(user.id) };
+}
+
+async function issueSession(userId, db = prisma) {
+  const refreshToken = generateRefreshToken();
+  await deleteExpiredRefreshTokens(userId, db);
+  await createRefreshToken(
+    {
+      userId,
+      tokenHash: hashToken(refreshToken),
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRES_IN * 1000),
     },
-  };
+    db,
+  );
+  return { accessToken: await signAccessToken(userId), refreshToken };
+}
+
+function assertSocialProvider(provider) {
+  if (!SOCIAL_PROVIDERS.includes(provider)) {
+    throw new ApiError(400, "VALIDATION_ERROR", "지원하지 않는 로그인 방식입니다");
+  }
+}
+
+// Prisma unique 제약 위반(P2002)을 409 응답으로 바꾼다
+function toDuplicateError(error) {
+  if (error?.code !== "P2002") return null;
+  const target = String(
+    error.meta?.target ?? error.meta?.driverAdapterError?.cause?.constraint ?? "",
+  );
+  if (target.includes("nickname")) {
+    return new ApiError(409, "NICKNAME_ALREADY_EXISTS", "이미 사용 중인 닉네임입니다");
+  }
+  return new ApiError(409, "EMAIL_ALREADY_EXISTS", "이미 가입된 이메일입니다");
 }
 
 // 소셜 가입 시 닉네임이 겹치면 뒤에 숫자 4자리를 붙여 본다
@@ -195,21 +215,16 @@ async function makeUniqueNickname(baseNickname) {
   );
 }
 
-// 응답에 실을 사용자 정보 (point는 BigInt라 JSON으로 바로 못 보내므로 숫자로 바꾼다)
+// 로그인한 본인에게 돌려주는 사용자 정보 (point는 BigInt라 JSON으로 바로 못 보내므로 숫자로 바꾼다).
+// email·provider는 로그인 직후 바로 마이페이지에 가도 로그인 방식(비밀번호 변경 가능 여부)을 알 수 있게 함께 준다
 export function toPublicUser(user) {
   return {
     id: user.id,
     nickname: user.nickname,
+    email: user.email,
+    provider: user.provider,
     point: Number(user.point),
     lastDrawAt: user.lastDrawAt,
     createdAt: user.createdAt,
-  };
-}
-
-function toSession(session) {
-  return {
-    accessToken: session.access_token,
-    refreshToken: session.refresh_token,
-    expiresIn: session.expires_in ?? ACCESS_TOKEN_EXPIRES_IN,
   };
 }

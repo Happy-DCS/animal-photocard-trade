@@ -1,21 +1,9 @@
+import { PHOTO_CARD_GRID_CLASS } from "@/components/card/cardGrid";
 import ScaledPhotoCard from "@/components/card/ScaledPhotoCard";
 
 export default function MarketCardList({ cards, onCardClick }) {
   return (
-    <ul
-      className="
-        grid
-        w-full
-        grid-cols-2
-        gap-[8px]
-
-        tablet:grid-cols-2
-        tablet:gap-[12px]
-
-        pc:grid-cols-3
-        pc:gap-[20px]
-      "
-    >
+    <ul className={PHOTO_CARD_GRID_CLASS}>
       {cards.map((card) => (
         <li key={card.id} className="w-full min-w-0">
           <ScaledPhotoCard

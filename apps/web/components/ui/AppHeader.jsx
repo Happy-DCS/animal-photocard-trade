@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -13,18 +13,28 @@ const MENU_LINKS = [
   { href: "/market", label: "마켓플레이스" },
   { href: "/my-gallery", label: "마이갤러리" },
   { href: "/my-sales", label: "나의 판매 포토관리" },
+  { href: "/my-page", label: "마이페이지" },
 ];
 const HEADER_LOGO_CLASSNAME = "h-6 w-24 object-contain tablet:h-8 tablet:w-32 pc:h-10 pc:w-40";
 
 export default function AppHeader() {
   const pathname = usePathname();
-  const { currentUser, isLoading, logout } = useAuth();
+  const { currentUser, isLoading, logout, patchCurrentUser } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   // 모바일/태블릿·PC 두 군데에 따로 렌더링되는 Notification 인스턴스가 같은 열림 상태를 쓰도록 여기서 관리
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  // 알림 액션으로 바뀐 안읽음 개수 — null이면 아직 반영 전이라 currentUser.unreadCount를 대신 보여준다
-  const [liveUnreadCount, setLiveUnreadCount] = useState(null);
-  const unreadCount = liveUnreadCount ?? currentUser?.unreadCount ?? 0;
+  // 안읽은 알림 수는 전역 사용자 상태 한 곳에서 관리한다.
+  // 서버가 SSE로 보내는 값과 알림 드롭다운의 읽음·삭제 결과가 모두 currentUser.unreadCount로 모인다
+  const unreadCount = currentUser?.unreadCount ?? 0;
+  // Notification은 숫자 또는 (prev) => next 함수를 넘긴다 (useState setter와 같은 형태)
+  const handleUnreadCountChange = useCallback(
+    (countOrUpdater) =>
+      patchCurrentUser((prev) => ({
+        unreadCount:
+          typeof countOrUpdater === "function" ? countOrUpdater(prev.unreadCount) : countOrUpdater,
+      })),
+    [patchCurrentUser],
+  );
 
   // 메뉴 또는 모바일 알림 전체 화면이 열려 있는 동안 뒤 페이지 스크롤 막기
   useEffect(() => {
@@ -52,7 +62,7 @@ export default function AppHeader() {
   return (
     <>
       <header className="h-[56px] w-full bg-[#0F0F0F] tablet:h-[64px] pc:h-[80px]">
-        <NotificationDataProvider open={isNotifOpen} onUnreadCountChange={setLiveUnreadCount}>
+        <NotificationDataProvider open={isNotifOpen} onUnreadCountChange={handleUnreadCountChange}>
           <div className="mx-auto h-full w-full max-w-[1240px] px-[16px] tablet:px-[24px] pc:px-0">
             {/* 모바일: 햄버거-로고-알림. 알림이 열리면 이 줄 위를 뒤로가기+"알림" 타이틀 바로 덮는다 */}
             <div className="relative h-full tablet:hidden">

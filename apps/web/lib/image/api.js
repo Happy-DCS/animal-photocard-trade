@@ -1,4 +1,4 @@
-import { apiFetch, csrfHeaders } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 
 // image 도메인 API (포토카드 생성 페이지에서 사용)
 
@@ -11,6 +11,5 @@ export async function uploadImage({ file, category }) {
   return apiFetch("/images/upload", {
     method: "POST",
     body: formData,
-    headers: await csrfHeaders(),
   });
 }

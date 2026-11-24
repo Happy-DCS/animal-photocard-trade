@@ -12,9 +12,9 @@ import CreateSaleModal from "@/components/trade/CreateSaleModal";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import AppHeader from "@/components/ui/AppHeader";
 
-import { apiFetch } from "@/lib/api-client";
 import { saleToPhotoCardProps } from "@/components/card/toPhotoCardProps";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { getSales } from "@/lib/sales/api";
 
 const PAGE_SIZE = 20;
 
@@ -99,8 +99,11 @@ export default function MarketPage() {
 
   const observerRef = useRef(null);
 
-  // 요청 중복 방지
+  // 목록 요청이 진행 중인지 (다음 페이지 중복 요청 방지용)
   const isFetchingRef = useRef(false);
+
+  // 목록 요청마다 1씩 증가하는 번호. 가장 최근 요청의 응답만 화면에 반영하는 데 쓴다
+  const requestIdRef = useRef(0);
 
   // 검색어는 입력이 멈춘 뒤 300ms 후에만 요청에 반영
   useEffect(() => {
@@ -137,62 +140,24 @@ export default function MarketPage() {
 
   /**
    * ========================================
-   * 카테고리별 판매 개수 조회
-   * GET /sales
-   * ========================================
-   */
-  const fetchCategoryCounts = useCallback(async () => {
-    try {
-      const fetchCount = async (category, includeSoldOut) => {
-        const params = new URLSearchParams();
-
-        params.set("limit", "1");
-        params.set("category", category);
-        params.set("includeSoldOut", String(includeSoldOut));
-
-        // 검색어가 있다면 검색 결과 기준으로 카운팅
-        if (debouncedKeyword.trim()) {
-          params.set("keyword", debouncedKeyword.trim());
-        }
-
-        const result = await apiFetch(`/sales?${params.toString()}`);
-
-        return typeof result?.totalCount === "number" ? result.totalCount : 0;
-      };
-
-      const [dogExcluded, catExcluded, dogIncluded, catIncluded] = await Promise.all([
-        fetchCount("DOG", false),
-        fetchCount("CAT", false),
-        fetchCount("DOG", true),
-        fetchCount("CAT", true),
-      ]);
-
-      setCountsBySoldOut({
-        false: { DOG: dogExcluded, CAT: catExcluded },
-        true: { DOG: dogIncluded, CAT: catIncluded },
-      });
-    } catch (error) {
-      console.error("카테고리별 판매 개수 조회 실패:", error);
-
-      setCountsBySoldOut({
-        false: { DOG: 0, CAT: 0 },
-        true: { DOG: 0, CAT: 0 },
-      });
-    }
-  }, [debouncedKeyword]);
-
-  /**
-   * ========================================
    * 판매 목록 조회
    * GET /sales
    * ========================================
+   *
+   * 첫 페이지 요청에는 includeCounts를 붙여 모바일 필터용 카테고리별 개수(categoryCounts)를 함께 받는다.
+   * 커서로 다음 페이지를 받을 때는 서버가 개수를 보내지 않으므로 기존 값을 그대로 둔다
    */
   const fetchSales = useCallback(
     async ({ cursor = null, append = false } = {}) => {
-      // 이미 요청 중이면 중복 요청 방지
-      if (isFetchingRef.current) {
+      // 다음 페이지(append)는 이미 요청 중이면 건너뛴다 (무한 스크롤 중복 요청 방지).
+      // 첫 페이지(필터·검색·정렬 변경)는 진행 중인 요청이 있어도 항상 새로 보내고, 이전 요청의 응답은 버린다
+      if (append && isFetchingRef.current) {
         return;
       }
+
+      const requestId = ++requestIdRef.current;
+      // 늦게 도착한 이전 조건의 응답이 화면을 덮어쓰지 않도록, 가장 최근 요청의 응답만 반영한다
+      const isLatest = () => requestId === requestIdRef.current;
 
       isFetchingRef.current = true;
 
@@ -206,60 +171,30 @@ export default function MarketPage() {
       }
 
       try {
-        const params = new URLSearchParams();
+        const result = await getSales({
+          limit: PAGE_SIZE,
+          keyword: debouncedKeyword.trim() || undefined,
+          // API는 category 하나만 받을 수 있음
+          // []              → 전체
+          // ["DOG"]         → 강아지
+          // ["CAT"]         → 고양이
+          // ["DOG", "CAT"]  → 전체
+          category: categories.length === 1 ? categories[0] : undefined,
+          // false → 품절 제외 / true → 품절 포함
+          includeSoldOut: isSoldOutIncluded,
+          orderBy: ORDER_BY_MAP[sort],
+          cursor: cursor ?? undefined,
+          includeCounts: !append,
+        });
 
-        params.set("limit", String(PAGE_SIZE));
+        if (!isLatest()) return;
 
-        // ========================================
-        // 검색어
-        // ========================================
-
-        if (debouncedKeyword.trim()) {
-          params.set("keyword", debouncedKeyword.trim());
+        if (result?.categoryCounts) {
+          setCountsBySoldOut({
+            false: result.categoryCounts.excludeSoldOut, // 품절 제외
+            true: result.categoryCounts.includeSoldOut, // 품절 포함
+          });
         }
-
-        // ========================================
-        // 카테고리
-        // ========================================
-
-        // API는 category 하나만 받을 수 있음
-        //
-        // []              → 전체
-        // ["DOG"]         → 강아지
-        // ["CAT"]         → 고양이
-        // ["DOG", "CAT"]  → 전체
-        //
-        if (categories.length === 1) {
-          params.set("category", categories[0]);
-        }
-
-        // ========================================
-        // 품절 포함 여부
-        // ========================================
-
-        // false → 품절 제외
-        // true  → 품절 포함
-        params.set("includeSoldOut", String(isSoldOutIncluded));
-
-        // ========================================
-        // 정렬
-        // ========================================
-
-        const orderBy = ORDER_BY_MAP[sort];
-
-        if (orderBy) {
-          params.set("orderBy", orderBy);
-        }
-
-        // ========================================
-        // cursor
-        // ========================================
-
-        if (cursor) {
-          params.set("cursor", cursor);
-        }
-
-        const result = await apiFetch(`/sales?${params.toString()}`);
 
         const lists = result?.lists ?? [];
         const newCursor = result?.nextCursor ?? null;
@@ -275,6 +210,8 @@ export default function MarketPage() {
         setNextCursor(newCursor);
         setHasMore(Boolean(newCursor));
       } catch (error) {
+        if (!isLatest()) return;
+
         console.error("판매 목록 조회 실패:", error);
 
         if (!append) {
@@ -284,9 +221,12 @@ export default function MarketPage() {
         setNextCursor(null);
         setHasMore(false);
       } finally {
-        isFetchingRef.current = false;
-        setIsLoading(false);
-        setIsLoadingMore(false);
+        // 버려진 요청이 끝났을 때는 최신 요청의 진행 상태를 건드리지 않는다
+        if (isLatest()) {
+          isFetchingRef.current = false;
+          setIsLoading(false);
+          setIsLoadingMore(false);
+        }
       }
     },
     [debouncedKeyword, categories, isSoldOutIncluded, sort, normalizeSale],
@@ -305,9 +245,7 @@ export default function MarketPage() {
       cursor: null,
       append: false,
     });
-
-    fetchCategoryCounts();
-  }, [fetchSales, fetchCategoryCounts]);
+  }, [fetchSales]);
 
   /**
    * ========================================
@@ -491,21 +429,24 @@ export default function MarketPage() {
     <>
       <AppHeader />
 
+      {/* 카드 폭을 마이갤러리와 똑같이 맞추기 위해 컨테이너 폭도 같은 기준을 쓴다 (components/card/cardGrid.js)
+          모바일: 좌우 16px 여백 · 태블릿: 콘텐츠 최대 680px(+ 좌우 24px 여백) · PC: 1240px */}
       <main
         className="
           isolate
           mx-auto
           min-h-screen
           w-full
-          max-w-[1248px]
           px-[16px]
           pt-[20px]
           pb-[37px]
 
-          tablet:px-[20px]
+          tablet:max-w-182
+          tablet:px-6
           tablet:pt-[64px]
           tablet:pb-[224px]
 
+          pc:max-w-310
           pc:px-0
           pc:pb-[240px]
         "
@@ -580,8 +521,6 @@ export default function MarketPage() {
             cursor: null,
             append: false,
           });
-
-          fetchCategoryCounts();
         }}
       />
 

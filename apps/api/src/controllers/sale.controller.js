@@ -57,6 +57,7 @@ export async function getSales(req, res) {
   const orderBy = req.query.orderBy;
   const cursor = req.query.cursor;
   const page = req.query.page === undefined ? undefined : Number(req.query.page);
+  const includeCounts = req.query.includeCounts;
 
   //POST /sales/:saleId/purchase
   if (!Number.isInteger(limit) || limit < 1) {
@@ -111,7 +112,12 @@ export async function getSales(req, res) {
     throw new ApiError(400, "VALIDATION_ERROR", "offererId 값이 올바르지 않습니다");
   }
 
-  const { lists, nextCursor, totalCount, totalPages } = await saleService.getSales({
+  // 카테고리별 개수(모바일 필터 표시용)는 요청할 때만 집계한다
+  if (includeCounts !== undefined && !["true", "false"].includes(includeCounts)) {
+    throw new ApiError(400, "VALIDATION_ERROR", "includeCounts는 true 또는 false여야 합니다");
+  }
+
+  const { lists, nextCursor, totalCount, totalPages, categoryCounts } = await saleService.getSales({
     category,
     keyword,
     includeSoldOut,
@@ -122,6 +128,7 @@ export async function getSales(req, res) {
     cursor,
     page,
     limit,
+    includeCounts: includeCounts === "true",
   });
 
   res.status(200).json({
@@ -132,6 +139,10 @@ export async function getSales(req, res) {
 
       ...(page !== undefined && {
         totalPages,
+      }),
+
+      ...(categoryCounts && {
+        categoryCounts,
       }),
     },
   });

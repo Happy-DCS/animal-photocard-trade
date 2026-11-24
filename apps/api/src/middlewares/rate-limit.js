@@ -42,3 +42,9 @@ export const exchangeActionRateLimit = rateLimit({
   ...COMMON_OPTIONS,
   max: 60,
 });
+
+// 닉네임·비밀번호 변경, 회원 탈퇴 — 현재 비밀번호 대입 시도를 막기 위해 낮게 잡는다
+export const accountUpdateRateLimit = rateLimit({
+  ...COMMON_OPTIONS,
+  max: 20,
+});

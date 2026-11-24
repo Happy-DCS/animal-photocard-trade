@@ -89,6 +89,14 @@ export default function Profile({ currentUser }) {
               >
                 나의 거래 포토카드
               </Link>
+              <Link
+                href="/my-page"
+                onClick={() => setOpen(false)}
+                aria-current={isCurrentPage("/my-page") ? "page" : undefined}
+                className={`font-sans-700 text-sm ${isCurrentPage("/my-page") ? "text-purple-button" : "text-gray-200 hover:text-white"}`}
+              >
+                마이페이지
+              </Link>
             </div>
           </div>
         </div>

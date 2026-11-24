@@ -79,3 +79,33 @@ body {
   font-family: var(--font-sans);
   word-break: keep-all;
 }
+
+/* 포토카드 제목이 한 줄을 넘을 때, 카드(.group)에 마우스를 올리면 처음에서 잠깐 멈춘 뒤 끝까지 훑고,
+   끝에서 잠깐 멈췄다가 처음 위치로 바로 돌아가 반복한다 (components/card/MarqueeText.jsx).
+   구간 비율: 0~15% 처음에서 멈춤 · 15~80% 이동 · 80~100% 끝에서 멈춤 → 다음 반복은 처음부터 */
+@keyframes marquee-pan {
+  0%,
+  15% {
+    transform: translateX(0);
+  }
+  80%,
+  100% {
+    transform: translateX(var(--marquee-distance));
+  }
+}
+
+.group:hover .marquee-pan {
+  animation: marquee-pan var(--marquee-duration) linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .marquee-pan {
+    animation: none;
+  }
+}
+
+/* 포토카드 설명처럼 카드 안에서 따로 스크롤되는 영역의 얇은 스크롤바 */
+.card-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #5a5a5a transparent;
+}

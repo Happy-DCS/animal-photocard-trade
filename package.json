@@ -6,7 +6,10 @@
     "format:check": "prettier --check .",
     "lint": "npm --prefix apps/web run lint && npm --prefix apps/api run lint",
     "build": "npm --prefix apps/web run build",
-    "prepare": "husky"
+    "prepare": "husky",
+    "dev": "concurrently -k -n api,web -c blue,magenta \"npm --prefix apps/api run dev\" \"npm --prefix apps/web run dev\"",
+    "dev:api": "npm --prefix apps/api run dev",
+    "dev:web": "npm --prefix apps/web run dev"
   },
   "lint-staged": {
     "*.{json,css,md,yml,yaml}": "prettier --write",
@@ -20,8 +23,9 @@
     ]
   },
   "devDependencies": {
+    "concurrently": "^10.0.7",
     "husky": "^9.1.7",
-    "lint-staged": "^17.4.1",
-    "prettier": "3.9.6"
+    "lint-staged": "^17.6.2",
+    "prettier": "3.10.1"
   }
 }

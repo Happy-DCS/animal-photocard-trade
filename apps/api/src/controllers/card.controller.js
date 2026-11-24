@@ -5,6 +5,8 @@ import {
   enums,
   integer,
   min,
+  number,
+  optional,
   refine,
   string,
   trimmed,
@@ -19,16 +21,28 @@ import * as cardService from "../services/card.service.js";
 const FILTER_TYPES = [1, 2, 3, 4];
 const NonEmpty = refine(string(), "nonEmpty", (value) => value.trim() !== "");
 
+// 원본 기준 퍼센트(0~100) 좌표. 웹의 react-easy-crop croppedAreaPercentages 형식
+const Percent = refine(number(), "percent", (value) => value >= 0 && value <= 100);
+const CropArea = refine(
+  type({ x: Percent, y: Percent, width: Percent, height: Percent }),
+  "cropArea",
+  // 영역이 비어 있거나 이미지 밖으로 나가면 안 된다 (소수점 오차는 0.5%까지 허용)
+  ({ x, y, width, height }) => width > 0 && height > 0 && x + width <= 100.5 && y + height <= 100.5,
+);
+
 const CreateCardBody = type({
   imageId: NonEmpty,
   filterType: enums(FILTER_TYPES),
   name: NonEmpty,
+  // 카드에 보일 영역. 없으면 가운데 기준으로 카드 비율에 맞춰 자른다
+  crop: optional(CropArea),
 });
 
 const VALIDATION_MESSAGES = {
   imageId: "imageId가 필요합니다",
   filterType: `filterType 은 ${FILTER_TYPES.join(" / ")} 중 하나여야 합니다`,
   name: "포토카드 이름을 입력해 주세요",
+  crop: "crop 영역이 올바르지 않습니다",
 };
 
 export async function create(req, res) {
@@ -37,7 +51,7 @@ export async function create(req, res) {
     throw new ApiError(
       400,
       "VALIDATION_ERROR",
-      VALIDATION_MESSAGES[error.key] ?? "요청 파라미터가 올바르지 않습니다",
+      VALIDATION_MESSAGES[error.path?.[0] ?? error.key] ?? "요청 파라미터가 올바르지 않습니다",
     );
   }
 
@@ -46,6 +60,7 @@ export async function create(req, res) {
     imageId: body.imageId,
     filterType: body.filterType,
     name: body.name.trim(),
+    crop: body.crop,
   });
   res.status(201).json({ data: result });
 }
